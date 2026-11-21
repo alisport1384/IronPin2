@@ -228,6 +228,10 @@ void main() {
     await t.pumpAndSettle();
     await t.scrollUntilVisible(find.text('همه پیام‌رسان‌ها'), 150,
         scrollable: find.byType(Scrollable).first, maxScrolls: 30);
+    // scrollUntilVisible may stop as soon as a lazily-built row enters the
+    // tree; move it fully into the viewport before tapping.
+    await t.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await t.pumpAndSettle();
     await t.tap(find.text('همه پیام‌رسان‌ها'));
     await t.pumpAndSettle();
     await t.tap(find.text('ایتا').last);
