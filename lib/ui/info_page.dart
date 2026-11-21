@@ -572,7 +572,6 @@ class _InfoPageState extends State<InfoPage> {
 
 class _LazyExpansionTile extends StatefulWidget {
   final String? storageKey;
-  final bool initiallyExpanded;
   final Widget title;
   final Widget? subtitle;
   final Widget? leading;
@@ -584,7 +583,6 @@ class _LazyExpansionTile extends StatefulWidget {
 
   const _LazyExpansionTile({
     this.storageKey,
-    this.initiallyExpanded = false,
     required this.title,
     this.subtitle,
     this.leading,
@@ -601,12 +599,6 @@ class _LazyExpansionTile extends StatefulWidget {
 
 class _LazyExpansionTileState extends State<_LazyExpansionTile> {
   bool _expanded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _expanded = widget.initiallyExpanded;
-  }
 
   @override
   Widget build(BuildContext context) {
