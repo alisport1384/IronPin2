@@ -323,7 +323,6 @@ class _InfoPageState extends State<InfoPage> {
             'در این حالت فقط فید قیمت سرور دریافت می‌شود و جستجوگرهای داخلی منبع یا پیشنهادهای کشف‌شده اجرا نمی‌شوند.')
       else
         _LazyExpansionTile(
-            initiallyExpanded: true,
             title: const Text('هوش جستجوگر ۲ و فهرست منابع کشف‌شده'),
             builder: () => [FinderPanel(c: c)]),
       const Text('اتصال‌های قابل نوسازی',

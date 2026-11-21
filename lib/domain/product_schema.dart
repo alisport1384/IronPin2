@@ -321,10 +321,12 @@ class ProductFacts {
           ? field('ستون')
           : RegExp('(${ProductText.n})\\s*ستون').firstMatch(title)?[1] ?? '',
       'mass': q.pieceKg?.toString() ?? field('وزن'),
-      'chemistry': field(r'آنالیز شیمیایی|ترکیب شیمیایی|آنالیز|FeT|Fe کل'),
-      'moisture': field(r'رطوبت'),
-      'delivery': field(r'محل تحویل|مبنای تحویل|تحویل'),
-      'unitBasis': field(r'مبنای فروش|واحد فروش'),
+      if (family == 'مواد اولیه فولاد') ...{
+        'chemistry': field(r'آنالیز شیمیایی|ترکیب شیمیایی|آنالیز|FeT|Fe کل'),
+        'moisture': field(r'رطوبت'),
+        'delivery': field(r'محل تحویل|مبنای تحویل|تحویل'),
+        'unitBasis': field(r'مبنای فروش|واحد فروش'),
+      },
     };
     // Table dimensions can be the explicit section size (e.g. 40x40).
     if (values['dimensions']!.isEmpty &&

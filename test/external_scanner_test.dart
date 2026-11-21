@@ -10,7 +10,7 @@ void main() {
     Uri? requested;
     final client = MockClient((request) async {
       requested = request.url;
-      return http.Response(jsonEncode({
+      return http.Response.bytes(utf8.encode(jsonEncode({
         'format': 'ironpin-quotes-v1',
         'cursor': 200,
         'complete': true,
@@ -44,7 +44,7 @@ void main() {
             'details': {}
           }
         ]
-      }), 200, headers: {'content-type': 'application/json'});
+      })), 200, headers: {'content-type': 'application/json'});
     });
     final batch = await ExternalScanner.fetch(client,
         url: defaultExternalScannerUrl, since: 123);
