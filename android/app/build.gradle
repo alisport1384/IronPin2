@@ -1,0 +1,81 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "ir.ironpin.ironpin"
+    compileSdk = 35
+    ndkVersion = flutter.ndkVersion
+
+    // A stable key keeps a new build installable over the previous one, so the
+    // local archive is never lost to an uninstall. Supplied through the
+    // environment (see tool/sign_env.sh); without it the debug key is used, as
+    // before, and nothing machine-specific is stored in the source.
+    def releaseStore = System.getenv('IRONPIN_KEYSTORE')
+    signingConfigs {
+        if (releaseStore != null) {
+            release {
+                storeFile file(releaseStore)
+                storePassword System.getenv('IRONPIN_STORE_PASSWORD')
+                keyAlias System.getenv('IRONPIN_KEY_ALIAS')
+                keyPassword System.getenv('IRONPIN_KEY_PASSWORD')
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "ir.ironpin.ironpin"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = 21
+        targetSdk = 35
+        // One architecture per APK. Flutter passes -Ptarget-platform, so the
+        // filter follows the architecture being built: `android-arm` gives
+        // armeabi-v7a and `android-arm64` gives arm64-v8a. Without this the OCR
+        // library would put its arm64/x86 copies into the same file and leave a
+        // mixed-ABI package that cannot load on a 64-bit phone.
+        def buildTargetPlatform = project.hasProperty('target-platform')
+            ? project.property('target-platform').toString()
+            : ''
+        def deliveredAbi = buildTargetPlatform.contains('arm64')
+            ? 'arm64-v8a'
+            : buildTargetPlatform.contains('x64') ? 'x86_64' : 'armeabi-v7a'
+        ndk {
+            abiFilters deliveredAbi
+        }
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig = releaseStore != null
+                ? signingConfigs.release
+                : signingConfigs.debug
+        }
+    }
+}
+
+dependencies {
+    // Offline Persian OCR. ML Kit's on-device text recognition has no Persian
+    // model, so Tesseract 5 with the `fas` trained data reads the picture on the
+    // phone itself (see OcrChannel.kt and android/app/src/main/assets/tessdata).
+    implementation 'cz.adaptech.tesseract4android:tesseract4android:4.8.0'
+}
+
+flutter {
+    source = "../.."
+}
