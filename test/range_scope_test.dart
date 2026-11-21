@@ -69,6 +69,10 @@ void main() {
     dir = await Directory.systemTemp.createTemp('scope');
     store = await MarketStore.open(
         dbPath: '${dir.path}/s.db', factory: databaseFactoryFfi);
+    // The controller starts the finder timer on init; a tick landing on the
+    // closed database in tearDown fails this suite, whose subject is the
+    // candidate index, not the finder — same as manual_history_test.
+    await store.setSetting('finder.enabled', 'false');
   });
   tearDown(() async {
     await store.close();
