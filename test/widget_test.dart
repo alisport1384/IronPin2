@@ -226,8 +226,7 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(ListTile, 'مشهد'));
     await t.pumpAndSettle();
-    await t.scrollUntilVisible(
-        find.byType(DropdownButtonFormField<String>), 150,
+    await t.scrollUntilVisible(find.text('همه پیام‌رسان‌ها'), 150,
         scrollable: find.byType(Scrollable).first, maxScrolls: 30);
     await t.tap(find.text('همه پیام‌رسان‌ها'));
     await t.pumpAndSettle();
