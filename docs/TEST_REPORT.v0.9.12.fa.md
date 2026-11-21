@@ -28,3 +28,26 @@ flutter test --concurrency=1 -> 513 passed, 0 failed
 ## آزمایش‌نشده
 
 - تست تعاملی روی گوشی واقعی اندرویدی پس از دریافت فایل نهایی GitHub Release با کاربر است.
+
+---
+
+## ادامهٔ ممیزی کاتالوگ و مود خارجی (۲۱ آبان ۱۴۰۵ / 2026-11-21)
+
+**زمینه:** درخواست کاربر برای ممیزی «محصولاتی که اسکنر آنلاین هستن ولی توی محصولات ایرونپین نیستن» + رفتار مود خارجی.
+
+### نتیجهٔ ممیزی (سطح خانواده + سطح فیلد)
+- خانوادهٔ **تیرچه** (۱۲۳ قیمت زنده در `qwen.alisport0.qzz.io`) در اپ نبود → افزوده شد.
+- خانوادهٔ **مواد اولیه فولاد** در اپ بود ولی در کاتالوگ اسکنر فقط با شناسهٔ `other` می‌آمد → برچسب‌های کامل در اپ حفظ شد و اسکنر `other` را نگه داشت (قرارداد تست‌ها).
+- ۹ خانواده در اسکنر فیلد بیشتری داشتند → در `product_schema.dart` بک‌فیل شد: بولت (`lengthDeployed`, `massNote`, `torque`)، تسمه (`cutPrice`, `tolerance`)، توری (`coating`)، رابیتس (`massNote`)، شمش (`exchange`)، قراضه (`contaminant`, `deduction`, `purity`)، مش جوشی (`massFormula`, `overlap`)، مفتول (`coil`, `use`)، چهارپهلو (`form`, `areaFormula`, `hexKey`) + استخراج `field()` متناظر در `ProductFacts.of`.
+- **تعریف هر خانواده:** `productDefinitions` (۲۰ مدخل) + نمایش `infoBox` بالای فرم رنج در `range_page.dart`.
+- `requiredFeatures` برای ۹ خانوادهٔ بدون الزام (سپری، تسمه، چهارپهلو، میلگرد بستر، مش جوشی، رابیتس، شمش، قراضه، تیرچه) تکمیل شد.
+- طبقه‌بندی `ProductText`: regex و `category()` تیرچه را قبل از شاخهٔ تیرآهن می‌بیند (بدون بازگشت).
+
+### مود خارجی/داخلی (ریکوئست ۲a) — راستی‌آزمایی
+- `setScanMode` + dropdown «روش دریافت قیمت» از قبل موجود؛ جستجوگرهای داخلی در مود خارجی خاموش و `FinderPanel` پشت کشویی/پیام جایگزین.
+- `_refreshExternal`: قفل نوسازی مشابه داخلی، بار اول کامل (`saved == null && complete`)، بعد incremental.
+- شکاف سروری رفع شد: سرور `since` را نادیده می‌گرفت → `streamIronpinExport(db, {since})` + فیلد `cursor` در qwenscanner (کامیت مجزا).
+
+### تست جدید
+- `test/catalog_gap_v0912_test.dart`: خانوادهٔ تیرچه (schema + classify + facts + requiredFeatures)، بک‌فیل برچسب‌ها، پوشش `productDefinitions` برای همهٔ خانواده‌ها.
+- اجرای محلی flutter در دسترس نبود؛ **GitHub Actions (checkout@v5 + flutter 3.24.5) مرجع سبز بودن است** — پس از پوش، ران مربوطه باید سبز باشد.

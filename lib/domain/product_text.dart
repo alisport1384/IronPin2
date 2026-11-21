@@ -144,7 +144,7 @@ class ProductText {
       _nonMetalFast.hasMatch(text) && _nonMetal.hasMatch(normalize(text));
 
   static final product = RegExp(
-      r'انکر\s*بولت|انکربولت|رول\s*بولت|بولت|\banchor\s+bolt\b|مواد\s*اولیه\s*فولاد|آهن\s*اسفنجی|گندله|بریکت|فرو\s*آلیاژ|\bDRI\b|\bHBI\b|pellet|briquette|ferroalloy|میلگرد(?:\s+بستر)?|تیر\s*آهن|تیراهن|هاش|ناودانی|نبشی|پروفیل|قوطی|لوله|ورق|پلیت|صفحه\s+(?:فولادی|آهنی|فلزی)|شیت|\b(?:plate|sheet)\b|چهارپهلو|مفتول|تسمه|سپری|رابیتس|توری|مش\s+جوشی|شمش|قراضه',
+      r'انکر\s*بولت|انکربولت|رول\s*بولت|بولت|\banchor\s+bolt\b|مواد\s*اولیه\s*فولاد|آهن\s*اسفنجی|گندله|بریکت|فرو\s*آلیاژ|\bDRI\b|\bHBI\b|pellet|briquette|ferroalloy|میلگرد(?:\s+بستر)?|تیر\s*چه|تیر\s*آهن|تیراهن|هاش|ناودانی|نبشی|پروفیل|قوطی|لوله|ورق|پلیت|صفحه\s+(?:فولادی|آهنی|فلزی)|شیت|\b(?:plate|sheet)\b|چهارپهلو|مفتول|تسمه|سپری|رابیتس|توری|مش\s+جوشی|شمش|قراضه',
       caseSensitive: false);
   static String category(String text) {
     final norm = normalize(text);
@@ -153,6 +153,7 @@ class ProductText {
     if (RegExp(r'مواد|اسفنجی|گندله|بریکت|فرو|DRI|HBI|pellet|briquette|ferro', caseSensitive: false).hasMatch(s)) {
       return 'مواد اولیه فولاد';
     }
+    if (RegExp(r'تیر\s*چه').hasMatch(s)) return 'تیرچه';
     if (s.contains('تیر') || s == 'هاش') return 'تیرآهن';
     if (RegExp(r'پلیت|صفحه|شیت|plate|sheet', caseSensitive: false)
         .hasMatch(s)) {
