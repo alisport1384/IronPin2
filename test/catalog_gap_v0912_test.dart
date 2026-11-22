@@ -58,7 +58,7 @@ void main() {
   });
 
   test('requiredFeatures covers every family the schema declares', () {
-    expect(requiredFeatures('تیرچه'), ['نوع', 'طول']);
+    expect(Searcher.requiredFeatures('تیرچه'), ['نوع', 'طول']);
     // Backfilled families must no longer fall through to the empty default.
     for (final family in [
       'سپری',
@@ -70,7 +70,7 @@ void main() {
       'شمش',
       'قراضه',
     ]) {
-      expect(requiredFeatures(family), isNotEmpty,
+      expect(Searcher.requiredFeatures(family), isNotEmpty,
           reason: '$family lost its required features');
     }
   });
