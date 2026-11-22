@@ -11,7 +11,9 @@ void main() {
   final now = DateTime.utc(2026, 11, 21, 12);
 
   Quote row(String id, double? amount,
-          {String title = 'تیرچه فلزی', String category = 'تیرچه'}) =>
+          {String title = 'تیرچه فلزی',
+          String category = 'تیرچه',
+          Map<String, String> details = const {}}) =>
       Quote(
           id: id,
           endpoint: 'test',
@@ -25,7 +27,7 @@ void main() {
           sourceDateRaw: '2026-11-21T08:00:00Z',
           fetchedAt: now,
           sourceUrl: 'https://example.com',
-          details: const {});
+          details: details);
 
   test('تیرچه is a first-class family (live scanner product)', () {
     expect(productFields.containsKey('تیرچه'), true);
@@ -49,9 +51,7 @@ void main() {
   test('ProductFacts extracts تیرچه kind from details', () {
     final q = row('a', 2500000,
         title: 'تیرچه فلزی 4 متری',
-        category: 'تیرچه')
-      ..details['نوع'] = 'فلزی'
-      ..details['ارتفاع'] = '40';
+        details: const {'نوع': 'فلزی', 'ارتفاع': '40'});
     final facts = ProductFacts.of(q);
     expect(facts.family, 'تیرچه');
     expect(facts.values['kind'], 'فلزی');
