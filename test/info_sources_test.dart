@@ -15,7 +15,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(sqfliteFfiInit);
 
-  testWidgets('all-off and all-on cover every listed source; one name groups '
+  testWidgets(
+      'all-off and all-on cover every listed source; one name groups '
       'its routes under a single card', (t) async {
     t.view.physicalSize = const Size(390, 844);
     t.view.devicePixelRatio = 1;
@@ -33,6 +34,17 @@ void main() {
     await t.pumpWidget(MaterialApp(home: Scaffold(body: InfoPage(c: c))));
     await t.pumpAndSettle();
 
+    // منابع داخلی پشت منوی کشویی تب اطلاعات پنهان شده است.
+    await t.scrollUntilVisible(find.text('باز کردن'), 250,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 40);
+    await t.tap(find.text('باز کردن'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('منابع داخلی'));
+    await t.pumpAndSettle();
+    final sheetScroll = find.descendant(
+        of: find.byKey(const Key('info-section-sheet')),
+        matching: find.byType(Scrollable));
+
     final allIds = c.availableEndpoints.map((e) => e.id).toSet();
     expect(allIds, isNotEmpty);
 
@@ -42,14 +54,15 @@ void main() {
     // همه خاموش: every listed source goes off, and the choice is stored.
     final off = find.text('همه خاموش');
     await t.scrollUntilVisible(off, 250,
-        scrollable: find.byType(Scrollable).first, maxScrolls: 40);
+        scrollable: sheetScroll, maxScrolls: 40);
     await t.tap(off);
     await t.pumpAndSettle();
     await drain();
     expect(c.enabled, isEmpty,
         reason: 'all-off must reach every available endpoint');
-    final storedOff =
-        jsonDecode(await t.runAsync(() async => (await store.setting('enabled')) ?? '') ?? '') as List;
+    final storedOff = jsonDecode(
+        await t.runAsync(() async => (await store.setting('enabled')) ?? '') ??
+            '') as List;
     expect(storedOff, isEmpty);
 
     // همه روشن: the same list back on — registered, added and finder-found.
@@ -61,21 +74,23 @@ void main() {
     await drain();
     expect(c.enabled.toSet(), allIds,
         reason: 'all-on must reach every available endpoint');
-    final storedOn =
-        jsonDecode(await t.runAsync(() async => (await store.setting('enabled')) ?? '') ?? '') as List;
+    final storedOn = jsonDecode(
+        await t.runAsync(() async => (await store.setting('enabled')) ?? '') ??
+            '') as List;
     expect(storedOn.toSet(), allIds);
 
     // Sources sharing a name are one card, named once, with both routes.
     final sameName = find.text('بنیان فولاد قوام مشهد');
     await t.scrollUntilVisible(sameName, 300,
-        scrollable: find.byType(Scrollable).first, maxScrolls: 100);
+        scrollable: sheetScroll, maxScrolls: 100);
     expect(sameName, findsOneWidget,
         reason: 'same-named sources must be displayed under one name');
     await t.tap(sameName);
     await t.pumpAndSettle();
     expect(find.textContaining('منبع با همین نام'), findsOneWidget);
     expect(find.textContaining('t.me/s/BonyanFouladGhavam'), findsOneWidget);
-    expect(find.textContaining('eitaa.com/bonyanfouladghavam2'), findsOneWidget);
+    expect(
+        find.textContaining('eitaa.com/bonyanfouladghavam2'), findsOneWidget);
     expect(find.text('دریافت از این منبع'), findsNWidgets(2),
         reason: 'each route keeps its own switch under the shared name');
     expect(t.takeException(), isNull);

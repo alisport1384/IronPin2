@@ -226,18 +226,28 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.widgetWithText(ListTile, 'مشهد'));
     await t.pumpAndSettle();
-    await t.scrollUntilVisible(find.text('همه پیام‌رسان‌ها'), 150,
+    // آدرس‌ها پشت منوی کشویی تب اطلاعات پنهان شده است.
+    await t.scrollUntilVisible(find.text('باز کردن'), 100,
         scrollable: find.byType(Scrollable).first, maxScrolls: 30);
+    await t.tap(find.text('باز کردن'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('آدرس‌ها'));
+    await t.pumpAndSettle();
+    final sheetScroll = find.descendant(
+        of: find.byKey(const Key('info-section-sheet')),
+        matching: find.byType(Scrollable));
+    await t.scrollUntilVisible(find.text('همه پیام‌رسان‌ها'), 150,
+        scrollable: sheetScroll, maxScrolls: 30);
     // scrollUntilVisible may stop as soon as a lazily-built row enters the
     // tree; move it fully into the viewport before tapping.
-    await t.drag(find.byType(Scrollable).first, const Offset(0, -200));
+    await t.drag(sheetScroll, const Offset(0, -200));
     await t.pumpAndSettle();
     await t.tap(find.text('همه پیام‌رسان‌ها'));
     await t.pumpAndSettle();
     await t.tap(find.text('ایتا').last);
     await t.pumpAndSettle();
     await t.scrollUntilVisible(find.text('رادمان آهن • ایتا'), 150,
-        scrollable: find.byType(Scrollable).first);
+        scrollable: sheetScroll);
     expect(find.text('رادمان آهن • ایتا'), findsOneWidget);
     expect(find.text('رادمان آهن • روبیکا'), findsNothing);
     expect(find.text('نوین پارس • بله'), findsNothing);
@@ -342,8 +352,17 @@ void main() {
       (t) async {
     await t.pumpWidget(MaterialApp(home: Scaffold(body: InfoPage(c: c))));
     await t.pumpAndSettle();
+    await t.scrollUntilVisible(find.text('باز کردن'), 100,
+        scrollable: find.byType(Scrollable).first, maxScrolls: 30);
+    await t.tap(find.text('باز کردن'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('منابع داخلی'));
+    await t.pumpAndSettle();
+    final sheetScroll = find.descendant(
+        of: find.byKey(const Key('info-section-sheet')),
+        matching: find.byType(Scrollable));
     await t.scrollUntilVisible(find.text(endpoints.first.name), 200,
-        scrollable: find.byType(Scrollable).first);
+        scrollable: sheetScroll);
     expect(find.text('هنوز آزموده نشده'), findsNothing);
     await t.tap(find.text(endpoints.first.name));
     await t.pumpAndSettle();

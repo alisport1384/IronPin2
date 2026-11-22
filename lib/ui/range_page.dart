@@ -8,9 +8,11 @@ import '../domain/calculator.dart';
 import '../domain/market.dart';
 import '../domain/money.dart';
 import '../domain/price_range.dart';
+import '../domain/tax_policy.dart';
 import '../domain/product_schema.dart';
 import 'calculator_page.dart';
 import 'common.dart';
+import 'tax_chip.dart';
 
 /// The amount a candidate really carries, in the unit it announced, so the list
 /// can never show an entry without a price.
@@ -26,12 +28,15 @@ String candidatePriceTextOf(Quote q) {
   final basis = rangeBasis(q);
   final comparable = q.tomanFor(basis);
   if (comparable != null && comparable > 0) {
-    return '${fmt(comparable)} تومان / ${q.unitName(basis)}';
+    return '${fmt(TaxPolicy.apply(comparable))} تومان / ${q.unitName(basis)}';
   }
   final own = q.tomanFor('original');
-  if (own != null && own > 0) return '${fmt(own)} تومان • واحد نامشخص';
+  if (own != null && own > 0) {
+    return '${fmt(TaxPolicy.apply(own))} تومان • واحد نامشخص';
+  }
   final amount = q.amount;
-  if (amount != null && amount > 0) return '${fmt(amount)} ${faDigits(q.currency)}';
+  if (amount != null && amount > 0)
+    return '${fmt(amount)} ${faDigits(q.currency)}';
   return faDigits(q.details['مبلغ استخراج‌شده'] ?? 'بدون قیمت');
 }
 
@@ -109,11 +114,10 @@ class _RangePageState extends State<RangePage> {
   /// The candidates of one product card, revealed only on request. Same rows,
   /// prices and dialogs as the tab always showed — scoped to the product the
   /// user asked about.
-  Widget _candidateSection(BuildContext context, _CatalogEntry entry,
-      String needle) {
-    final catalog = entry.candidates
-        .where((p) => p.searchText.contains(needle))
-        .toList();
+  Widget _candidateSection(
+      BuildContext context, _CatalogEntry entry, String needle) {
+    final catalog =
+        entry.candidates.where((p) => p.searchText.contains(needle)).toList();
     return ExpansionTile(
       title: Text('کاندیدهای همان کالا • ${fmt(catalog.length)} مورد'),
       children: [
@@ -197,13 +201,10 @@ class _RangePageState extends State<RangePage> {
     showCandidateCards.clear();
     cards = [
       for (final range in ranges)
-        _CatalogEntry(
-            range,
-            [
-              for (final p in answer.candidates)
-                if (range.announcements.any((q) => identical(q, p.example)))
-                  p
-            ])
+        _CatalogEntry(range, [
+          for (final p in answer.candidates)
+            if (range.announcements.any((q) => identical(q, p.example))) p
+        ])
     ];
   }
 
@@ -369,7 +370,8 @@ class _RangePageState extends State<RangePage> {
     // — and named — under the footer line, so a shorter list is always
     // explained rather than silent.
     bool hasPrice(Quote q) => q.amount != null && q.amount! > 0;
-    if (!identical(_filteredForResult, result) || _filteredForNeedle != needle) {
+    if (!identical(_filteredForResult, result) ||
+        _filteredForNeedle != needle) {
       _filteredForResult = result;
       _filteredForNeedle = needle;
       final list = result?.announcements ?? const <Quote>[];
@@ -406,6 +408,7 @@ class _RangePageState extends State<RangePage> {
         unawaited(widget.c.setTabDays('range', v));
         if (mounted) setState(invalidate);
       }, inherit: true, inherited: widget.c.discoveryDays),
+      TaxChip(c: widget.c),
       if (family == null) ...[
         const Text('انتخاب نوع محصول',
             style: TextStyle(fontWeight: FontWeight.bold)),
@@ -507,7 +510,7 @@ class _RangePageState extends State<RangePage> {
                               style: TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 15)),
                           Text(
-                              '${fmt(entry.range.rate(mode), decimals: mode == 'mean' ? 0 : 2)} تومان / ${entry.range.example.unitName(entry.range.basis)}',
+                              '${fmt(TaxPolicy.apply(entry.range.rate(mode)), decimals: mode == 'mean' ? 0 : 2)} تومان / ${entry.range.example.unitName(entry.range.basis)}',
                               style: const TextStyle(
                                   fontSize: 21,
                                   fontWeight: FontWeight.bold,
@@ -515,11 +518,11 @@ class _RangePageState extends State<RangePage> {
                           // The product's three indicators, each taken from
                           // this product's own rows only.
                           Text(
-                              'میانگین: ${fmt(entry.range.mean)} تومان / ${entry.range.example.unitName(entry.range.basis)}'),
+                              'میانگین: ${fmt(TaxPolicy.apply(entry.range.mean))} تومان / ${entry.range.example.unitName(entry.range.basis)}'),
                           Text(
-                              'بالاترین: ${fmt(entry.range.maximum, decimals: 2)} تومان / ${entry.range.example.unitName(entry.range.basis)}'),
+                              'بالاترین: ${fmt(TaxPolicy.apply(entry.range.maximum), decimals: 2)} تومان / ${entry.range.example.unitName(entry.range.basis)}'),
                           Text(
-                              'پایین‌ترین: ${fmt(entry.range.minimum, decimals: 2)} تومان / ${entry.range.example.unitName(entry.range.basis)}'),
+                              'پایین‌ترین: ${fmt(TaxPolicy.apply(entry.range.minimum), decimals: 2)} تومان / ${entry.range.example.unitName(entry.range.basis)}'),
                           ExpansionTile(
                               title: Text(
                                   'محاسبه هزینه • ${entry.range.example.unitName(entry.range.basis)}'),
@@ -565,7 +568,7 @@ class _RangePageState extends State<RangePage> {
                 dense: true,
                 title: Text(faDigits(q.title)),
                 subtitle: Text(
-                    '${q.amount == null ? (q.details['مبلغ استخراج‌شده'] ?? 'تماس / مبلغ نامعلوم') : fmt(toman(q.amount, q.currency) ?? q.amount, decimals: 2)} ${toman(q.amount, q.currency) == null ? q.currency : 'تومان'} / ${q.unitName(q.unit)}\n${faDigits(q.specificationLabel)}\n${dateLabel(q.marketAt)} • ${faDigits(q.seller)}\n${faDigits(q.tax)} • ${faDigits(q.terms)}',
+                    '${q.amount == null ? (q.details['مبلغ استخراج‌شده'] ?? 'تماس / مبلغ نامعلوم') : fmt(toman(q.amount, q.currency) != null ? TaxPolicy.apply(toman(q.amount, q.currency)!) : q.amount, decimals: 2)} ${toman(q.amount, q.currency) == null ? q.currency : 'تومان'} / ${q.unitName(q.unit)}\n${faDigits(q.specificationLabel)}\n${dateLabel(q.marketAt)} • ${faDigits(q.seller)}\n${faDigits(q.tax)} • ${faDigits(q.terms)}',
                     style: const TextStyle(fontSize: 11)),
                 onTap: q.sourceUrl.isEmpty
                     ? null
@@ -581,8 +584,9 @@ class _RangePageState extends State<RangePage> {
                 onPressed: () => setState(() => visible += 40),
                 child: const Text('نمایش ۴۰ اعلام بعدی')),
           if (shown.isEmpty)
-            const Text(
-                'اعلامی مطابق این جستجو/مشخصات در ۴۸ ساعت گذشته موجود نیست.'),
+            Text(widget.c.rangeWindow <= 0
+                ? 'اعلامی مطابق این جستجو/مشخصات موجود نیست.'
+                : 'اعلامی مطابق این جستجو/مشخصات در ${windowText(widget.c.rangeWindow)} گذشته موجود نیست.'),
           if (result!.excluded.isNotEmpty)
             ExpansionTile(title: const Text('علت نبودن در آمار'), children: [
               for (final e in result!.excluded.entries)
@@ -806,7 +810,7 @@ class _RangeCostState extends State<RangeCost> {
               icon: const Icon(Icons.menu_book_outlined))
         ]),
         Text(
-            'نرخ انتخابی: ${fmt(widget.rate, decimals: 2)} تومان / ${widget.range.example.unitName(widget.range.basis)}'),
+            'نرخ انتخابی: ${fmt(TaxPolicy.apply(widget.rate), decimals: 2)} تومان / ${widget.range.example.unitName(widget.range.basis)}'),
         if (widget.allowGeometry)
           SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -865,8 +869,8 @@ class _RangeCostState extends State<RangeCost> {
           infoBox('ورودی نیازمند اصلاح است', error!, color: Colors.red),
         if (total != null)
           infoBox(
-              'هزینه برآوردی: ${fmt(total)} تومان',
-              '${moneyWords(total!)}'
+              'هزینه برآوردی: ${fmt(TaxPolicy.apply(total!))} تومان',
+              '${moneyWords(TaxPolicy.apply(total!))}'
                   '${weight == null ? '' : '\nوزن: ${fmt(weight!.kg, decimals: 3)} کیلوگرم • متراژ: ${fmt(weight!.metres, decimals: 3)} متر'}'),
         infoBox(
             'مبلغ کالا، نه فاکتور نهایی',

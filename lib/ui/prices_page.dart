@@ -5,6 +5,8 @@ import '../data/controller.dart';
 import '../domain/market.dart';
 import 'common.dart';
 import '../domain/money.dart';
+import '../domain/tax_policy.dart';
+import 'tax_chip.dart';
 
 class PricesPage extends StatefulWidget {
   final MarketController c;
@@ -127,6 +129,9 @@ class _PricesPageState extends State<PricesPage> {
             unawaited(c.setTabDays('prices', v));
           }, inherit: true, inherited: c.discoveryDays)),
       Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+          child: TaxChip(c: c)),
+      Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(children: [
             Expanded(
@@ -240,8 +245,8 @@ class _PricesPageState extends State<PricesPage> {
   }
 }
 
-final _rawAmountPattern = RegExp(
-    r'^(?:\d+(?:[.٫]\d+)?|\d{1,3}(?:[,٬]\d{3})+(?:[.٫]\d+)?)$');
+final _rawAmountPattern =
+    RegExp(r'^(?:\d+(?:[.٫]\d+)?|\d{1,3}(?:[,٬]\d{3})+(?:[.٫]\d+)?)$');
 
 double? _visibleRawAmount(Quote q) {
   // Zero is not a price: sources that write «۰ تومان» mean "no price", so the
@@ -255,9 +260,13 @@ double? _visibleRawAmount(Quote q) {
 
 String _offerAmount(Quote q, String basis) {
   final value = q.priceFor(basis) ?? _visibleRawAmount(q);
-  return value != null
-      ? fmt(toman(value, q.currency) ?? value, decimals: 2)
-      : faDigits(q.details['مبلغ استخراج‌شده'] ?? 'نیازمند بررسی');
+  if (value == null) {
+    return faDigits(q.details['مبلغ استخراج‌شده'] ?? 'نیازمند بررسی');
+  }
+  final converted = toman(value, q.currency);
+  // مالیات فقط روی نمایش تومان اعمال می‌شود؛ مبلغ اصلی منبع دست‌نخورده می‌ماند.
+  return fmt(converted != null ? TaxPolicy.apply(converted) : value,
+      decimals: 2);
 }
 
 String _offerUnit(Quote q, String basis) {
@@ -298,8 +307,8 @@ class _QuoteCardState extends State<QuoteCard> {
                 setState(() => _expanded = expanded);
               }
               if (expanded) {
-                unawaited(AppLogger.instance
-                    .record('offer', 'specifications_opened', {
+                unawaited(AppLogger.instance.record(
+                    'offer', 'specifications_opened', {
                   'category': q.category,
                   'size': q.sizeLabel,
                   'thickness': q.thicknessLabel
@@ -329,8 +338,8 @@ class _QuoteCardState extends State<QuoteCard> {
                         FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(_offerUnit(q, basis),
-                                style: const TextStyle(
-                                    fontSize: 9, color: muted)))
+                                style:
+                                    const TextStyle(fontSize: 9, color: muted)))
                       ])),
                   const SizedBox(width: 5),
                   Icon(_expanded ? Icons.expand_less : Icons.expand_more,
@@ -376,10 +385,8 @@ class _QuoteCardState extends State<QuoteCard> {
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
                             onPressed: () {
-                              unawaited(AppLogger.instance.record(
-                                  'offer',
-                                  'details_opened',
-                                  {'category': q.category}));
+                              unawaited(AppLogger.instance.record('offer',
+                                  'details_opened', {'category': q.category}));
                               showQuoteDetails(context, q, widget.onChart);
                             },
                             icon: const Icon(Icons.chevron_left, size: 18),
@@ -426,7 +433,7 @@ class UnitPrices extends StatelessWidget {
                             Text(
                                 q.priceFor(unit) == null
                                     ? 'نامشخص؛ داده کافی نیست'
-                                    : '${fmt(q.tomanFor(unit) ?? q.priceFor(unit), decimals: 2)} ${q.tomanFor(unit) == null ? q.currency : 'تومان'}',
+                                    : '${fmt(q.tomanFor(unit) != null ? TaxPolicy.apply(q.tomanFor(unit)!) : q.priceFor(unit), decimals: 2)} ${q.tomanFor(unit) == null ? q.currency : 'تومان'}',
                                 style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,

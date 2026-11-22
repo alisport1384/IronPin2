@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../domain/market.dart';
+import '../domain/tax_policy.dart';
 import '../domain/maps_resolver.dart';
 import '../domain/ocr.dart';
 import '../domain/photo_scan.dart';
@@ -47,6 +48,8 @@ class MarketController extends ChangeNotifier {
   List<SourceEndpoint> finderSources = [];
   bool finderEnabled = true;
   bool externalScanMode = false;
+  bool taxEnabled = false;
+  double taxPercent = 13;
   String externalScannerUrl = defaultExternalScannerUrl;
   FinderReport? finderReport;
   Timer? _finderTimer;
@@ -90,8 +93,8 @@ class MarketController extends ChangeNotifier {
     if (disposed || !finderEnabled || externalScanMode) return;
     try {
       await finder.onNetworkConnected();
-      unawaited(AppLogger.instance
-          .record('discovery', 'finder_network_connected', {
+      unawaited(
+          AppLogger.instance.record('discovery', 'finder_network_connected', {
         'round': finder.state.round + 1,
       }));
     } catch (error, stack) {
@@ -230,12 +233,14 @@ class MarketController extends ChangeNotifier {
 
   /// One slice of the list builder, now. Never runs on top of a refresh.
   Future<FinderReport?> runFinderNow({int maxSteps = 10}) async {
-    if (disposed || externalScanMode || busy || transferring || finder.running) return null;
+    if (disposed || externalScanMode || busy || transferring || finder.running)
+      return null;
     try {
       final report = await finder.runSlice(
           maxSteps: maxSteps,
           budget: const Duration(seconds: 28),
-          cancelled: () => disposed || busy || transferring || externalScanMode);
+          cancelled: () =>
+              disposed || busy || transferring || externalScanMode);
       finderReport = report;
       if (report.steps > 0) {
         unawaited(AppLogger.instance.record('discovery', 'finder_slice', {
@@ -281,7 +286,8 @@ class MarketController extends ChangeNotifier {
           limit: limit,
           photos: photoScanner,
           alreadyLocked: false,
-          cancelled: () => disposed || _stopDelivery || transferring || externalScanMode);
+          cancelled: () =>
+              disposed || _stopDelivery || transferring || externalScanMode);
       if (accepted > 0) {
         await applyFinderAccepted();
         rangeSession.invalidate();
@@ -310,17 +316,23 @@ class MarketController extends ChangeNotifier {
   Future<void> _seedFinder() async {
     if (finder.state.seeded) return;
     final candidates = <String>[
-      for (final key in const ['telegram_channels', 'other_channels', 'sources'])
+      for (final key in const [
+        'telegram_channels',
+        'other_channels',
+        'sources'
+      ])
         for (final row in (registry[key] as List? ?? const []))
           if (row is Map && row['url'] is String) row['url'] as String
     ];
     final pages = <String>{
       for (final e in endpoints)
         if (!const {'telegram', 'eitaa', 'bale', 'rubika'}.contains(e.parser))
-          Uri(scheme: 'https', host: Uri.parse(e.url).host, path: '/').toString()
+          Uri(scheme: 'https', host: Uri.parse(e.url).host, path: '/')
+              .toString()
     };
     await finder.seed(candidates: candidates, pages: pages);
   }
+
   Future<void> rememberSources(Iterable<SourceEndpoint> found) async {
     final ids = {for (final e in availableEndpoints) e.id};
     final keys = {for (final e in availableEndpoints) endpointCanonicalKey(e)};
@@ -499,11 +511,13 @@ class MarketController extends ChangeNotifier {
   bool transferring = false;
   final Map<String, int> endpointRevisions = {};
   int historyEpoch = 0;
-  MarketController(this.store, {SourceClient? client, PhotoScanner? photoScanner})
+  MarketController(this.store,
+      {SourceClient? client, PhotoScanner? photoScanner})
       : client = client ?? SourceClient(),
-        photoScanner = photoScanner ?? PhotoScanner(
-            client: (client ?? SourceClient()).client,
-            engine: OcrEngine.platform());
+        photoScanner = photoScanner ??
+            PhotoScanner(
+                client: (client ?? SourceClient()).client,
+                engine: OcrEngine.platform());
 
   /// In-memory index of the archive and its confirmed answers. Purely additive:
   /// every answer is derived from the stored payloads, and any write drops it.
@@ -552,6 +566,8 @@ class MarketController extends ChangeNotifier {
       'mashhadSourcesVersion',
       'autoRefresh',
       'scanIntervalMinutes',
+      'tax.enabled',
+      'tax.percent',
       'lastRefresh',
       'lastBackgroundScan',
       'lastBackgroundScanCount',
@@ -591,6 +607,11 @@ class MarketController extends ChangeNotifier {
     externalScannerUrl = cfg['external.scanner.url']?.trim().isNotEmpty == true
         ? cfg['external.scanner.url']!.trim()
         : defaultExternalScannerUrl;
+    taxEnabled = cfg['tax.enabled'] == 'true';
+    taxPercent = double.tryParse(cfg['tax.percent'] ?? '') ?? 13;
+    if (taxPercent < 0 || taxPercent > 100) taxPercent = 13;
+    TaxPolicy.enabled = taxEnabled;
+    TaxPolicy.percent = taxPercent;
     if (finderEnabledRaw == null) {
       await store.setSetting('finder.enabled', '$finderEnabled');
     }
@@ -652,11 +673,9 @@ class MarketController extends ChangeNotifier {
       await store.setSettings(upgradeWrites);
     }
     autoRefresh = cfg['autoRefresh'] == 'true';
-    scanIntervalMinutes =
-        int.tryParse(cfg['scanIntervalMinutes'] ?? '') ?? 30;
+    scanIntervalMinutes = int.tryParse(cfg['scanIntervalMinutes'] ?? '') ?? 30;
     if (![15, 30, 60].contains(scanIntervalMinutes)) scanIntervalMinutes = 30;
-    lastRefreshAt =
-        DateTime.tryParse(cfg['lastRefresh'] ?? '')?.toLocal();
+    lastRefreshAt = DateTime.tryParse(cfg['lastRefresh'] ?? '')?.toLocal();
     lastBackgroundScan = cfg['lastBackgroundScan'];
     lastBackgroundScanCount =
         int.tryParse(cfg['lastBackgroundScanCount'] ?? '') ?? 0;
@@ -707,7 +726,8 @@ class MarketController extends ChangeNotifier {
 
   void _ensureQuotesMeta() {
     final id = identityHashCode(quotes);
-    if (id == _quotesMetaIdentity && _quotesById.length == quotes.length) return;
+    if (id == _quotesMetaIdentity && _quotesById.length == quotes.length)
+      return;
     _quotesMetaIdentity = id;
     final byId = <String, Quote>{};
     final cats = <String>{};
@@ -807,7 +827,9 @@ class MarketController extends ChangeNotifier {
     Future<bool> scanList(List<Quote> list) async {
       var i = 0;
       while (i < list.length) {
-        if (disposed || gen != _chartOptionsGen || !identical(snapshot, quotes)) {
+        if (disposed ||
+            gen != _chartOptionsGen ||
+            !identical(snapshot, quotes)) {
           return false;
         }
         final sw = Stopwatch()..start();
@@ -921,8 +943,8 @@ class MarketController extends ChangeNotifier {
     while (i < wires.length) {
       final at = (wires[i]['market_at'] as int?) ?? 0;
       var j = i + 1;
-      while (j < wires.length &&
-          (((wires[j]['market_at'] as int?) ?? 0) == at)) {
+      while (
+          j < wires.length && (((wires[j]['market_at'] as int?) ?? 0) == at)) {
         j++;
       }
       // One group [i, j): Mashhad first, both halves in their given order.
@@ -988,8 +1010,8 @@ class MarketController extends ChangeNotifier {
     final mashhadFirst = f.mashhadFirst;
     final groups = List<String>.generate(
         n, (i) => storedRowComparisonGroup(wires[i], basis));
-    final prices = List<double?>.generate(
-        n, (i) => storedRowTomanFor(wires[i], basis));
+    final prices =
+        List<double?>.generate(n, (i) => storedRowTomanFor(wires[i], basis));
     // Bucket by comparison group first (one hash per row), sort only the
     // distinct group keys, then sort inside each bucket with the cheap
     // precomputed prices. The old single sort compared the long group
@@ -1269,9 +1291,8 @@ class MarketController extends ChangeNotifier {
       enabled.removeAll(ids);
     }
     await store.setSetting('enabled', jsonEncode(enabled.toList()));
-    unawaited(AppLogger.instance.record(
-        'filter', value ? 'all_sources_on' : 'all_sources_off',
-        {'sources': ids.length}));
+    unawaited(AppLogger.instance.record('filter',
+        value ? 'all_sources_on' : 'all_sources_off', {'sources': ids.length}));
     _notify();
   }
 
@@ -1286,8 +1307,7 @@ class MarketController extends ChangeNotifier {
     _watchTimer?.cancel();
     _watchTimer = null;
     if (!autoRefresh || disposed) return;
-    _watchTimer =
-        Timer.periodic(Duration(minutes: scanIntervalMinutes), (_) {
+    _watchTimer = Timer.periodic(Duration(minutes: scanIntervalMinutes), (_) {
       if (disposed || busy || transferring || !autoRefresh || !foreground) {
         return;
       }
@@ -1445,6 +1465,9 @@ class MarketController extends ChangeNotifier {
       throw StateError('اسکن در حال اجراست.');
     }
     externalScanMode = external;
+    // حالت خارجی فقط فید سرور را می‌خواند (منابع داخلی همه خاموش)؛ حالت
+    // داخلی همه منابع را دوباره روشن می‌کند.
+    await setAllEnabled(!external);
     if (external) {
       _finderTimer?.cancel();
       _finderTimer = null;
@@ -1466,6 +1489,19 @@ class MarketController extends ChangeNotifier {
     }
     if (!external && finderEnabled) startFinder();
     startForegroundWatch();
+    _notify();
+  }
+
+  /// مالیات نمایشیِ تب‌های قیمت و رنج؛ پیش‌فرض خاموش با ۱۳ درصد.
+  Future<void> setTax({required bool enabled, required double percent}) async {
+    taxEnabled = enabled;
+    taxPercent = percent.clamp(0, 100).toDouble();
+    TaxPolicy.enabled = taxEnabled;
+    TaxPolicy.percent = taxPercent;
+    await store.setSettings({
+      'tax.enabled': '$taxEnabled',
+      'tax.percent': '$taxPercent',
+    });
     _notify();
   }
 
@@ -1494,13 +1530,15 @@ class MarketController extends ChangeNotifier {
       lease = await store.acquireRefreshLock();
     } catch (error, stack) {
       AppLogger.instance.capture(error, stack, section: 'refresh_lock');
-      refreshBlockedReason = 'قفل نوسازی در آرشیو خوانده نشد؛ بعداً دوباره تلاش کنید.';
+      refreshBlockedReason =
+          'قفل نوسازی در آرشیو خوانده نشد؛ بعداً دوباره تلاش کنید.';
       _notify();
       return;
     }
     if (lease == null || busy || transferring || disposed) {
       if (lease != null) await store.releaseRefreshLock(lease);
-      refreshBlockedReason = 'نوسازی دیگری در حال اجراست؛ پس از پایان دوباره تلاش کنید.';
+      refreshBlockedReason =
+          'نوسازی دیگری در حال اجراست؛ پس از پایان دوباره تلاش کنید.';
       _notify();
       return;
     }
@@ -1554,7 +1592,8 @@ class MarketController extends ChangeNotifier {
         await store.releaseRefreshLock(lease);
       } catch (_) {}
       lastRefreshAt =
-          DateTime.tryParse(await store.setting('lastRefresh') ?? '')?.toLocal();
+          DateTime.tryParse(await store.setting('lastRefresh') ?? '')
+              ?.toLocal();
       busy = false;
       await reload();
       _notify();
@@ -1586,7 +1625,8 @@ class MarketController extends ChangeNotifier {
       refreshLock = await store.acquireRefreshLock();
     } catch (error, stack) {
       AppLogger.instance.capture(error, stack, section: 'refresh_lock');
-      refreshBlockedReason = 'قفل نوسازی در آرشیو خوانده نشد؛ بعداً دوباره تلاش کنید.';
+      refreshBlockedReason =
+          'قفل نوسازی در آرشیو خوانده نشد؛ بعداً دوباره تلاش کنید.';
       _notify();
       return;
     }
@@ -1683,8 +1723,8 @@ class MarketController extends ChangeNotifier {
         try {
           final fetched = await client.fetch(e, windowDays: discoveryDays);
           // A price list published only as a picture is read here, automatically.
-          final data = await readPhotos(fetched,
-              defaultCurrency: e.defaultCurrency);
+          final data =
+              await readPhotos(fetched, defaultCurrency: e.defaultCurrency);
           // One searcher decides what may enter the archive: inside the parent
           // window, about a product, with its place resolved and one copy of
           // each offer. A source that yields nothing usable keeps its previous

@@ -241,8 +241,7 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                     chartQuote = q;
                     tab = 1;
                   })),
-          1 => ChartPage(
-              c: c, selectedId: chartId, selectedQuote: chartQuote),
+          1 => ChartPage(c: c, selectedId: chartId, selectedQuote: chartQuote),
           2 => RangePage(
               c: c,
               onChart: (q) => setState(() {
@@ -270,8 +269,8 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                           style: TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 19)),
                       Text(_headerSubtitle(c),
-                          style:
-                              const TextStyle(fontSize: 10, color: Colors.white70),
+                          style: const TextStyle(
+                              fontSize: 10, color: Colors.white70),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis)
                     ]))
@@ -316,8 +315,12 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                           Expanded(
                               child: Text(
                                   c.busy
-                                      ? 'دریافت منابع ${fmt(c.finished)} / ${fmt(c.enabled.length)}'
-                                      : '${fmt(c.quotes.length)} ردیف ذخیره‌شده روی دستگاه',
+                                      ? (c.externalScanMode
+                                          ? 'دریافت از سرور خارجی'
+                                          : 'دریافت منابع ${fmt(c.finished)} / ${fmt(c.enabled.length)}')
+                                      : (c.externalScanMode
+                                          ? 'به سرور خارجی'
+                                          : '${fmt(c.quotes.length)} ردیف ذخیره‌شده روی دستگاه'),
                                   style: const TextStyle(
                                       color: Colors.white70, fontSize: 10),
                                   maxLines: 1,
@@ -328,8 +331,11 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                               decoration: BoxDecoration(
                                   color: Colors.white10,
                                   borderRadius: BorderRadius.circular(6)),
-                              child: const Text('بدون سرور',
-                                  style: TextStyle(
+                              child: Text(
+                                  c.externalScanMode
+                                      ? 'سرور خارجی'
+                                      : 'بدون سرور',
+                                  style: const TextStyle(
                                       fontSize: 10, color: Colors.white60)))
                         ])),
                     if (c.busy)

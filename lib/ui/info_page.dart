@@ -16,6 +16,22 @@ class InfoPage extends StatefulWidget {
 }
 
 class _InfoPageState extends State<InfoPage> {
+  final _sheetTick = ValueNotifier<int>(0);
+
+  // The open section sheet follows the controller AND local setState: the
+  // city/search/platform filters live inside the section closures.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _sheetTick.value++;
+  }
+
+  @override
+  void dispose() {
+    _sheetTick.dispose();
+    super.dispose();
+  }
+
   String query = '', platform = '';
   bool exporting = false;
   Future<void> exportLogs() async {
@@ -108,7 +124,8 @@ class _InfoPageState extends State<InfoPage> {
     final qNorm = query.isEmpty ? '' : latin(query);
     final cityPattern = city.isEmpty
         ? null
-        : RegExp('(?<![آ-یA-Za-z])${RegExp.escape(latin(city))}(?![آ-یA-Za-z])');
+        : RegExp(
+            '(?<![آ-یA-Za-z])${RegExp.escape(latin(city))}(?![آ-یA-Za-z])');
     final cityUrls = city.isEmpty
         ? const <String>{}
         : <String>{
@@ -151,6 +168,260 @@ class _InfoPageState extends State<InfoPage> {
         (city.isEmpty || e.sellerCity == city))) {
       (grouped[e.name] ??= []).add(e);
     }
+    // سه گروه خواسته‌شده پشت یک منوی کشویی: منابع کشف‌شده، منابع داخلی و آدرس‌ها.
+    List<Widget> discoveredSection() => [
+          if (c.externalScanMode)
+            infoBox('جستجوی منابع در حالت خارجی غیرفعال است',
+                'در این حالت فقط فید قیمت سرور دریافت می‌شود و جستجوگرهای داخلی منبع یا پیشنهادهای کشف‌شده اجرا نمی‌شوند.')
+          else
+            _LazyExpansionTile(
+                title: const Text('هوش جستجوگر ۲ و فهرست منابع کشف‌شده'),
+                builder: () => [FinderPanel(c: c)]),
+        ];
+    List<Widget> internalSection() => [
+          const Text('اتصال‌های قابل نوسازی',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          const Text(
+              'فعالسازی منبع به معنی موفقیت دریافت نیست. مبلغ استخراج‌شده با واحد نامعلوم دیده می‌شود ولی تبدیل و رتبه‌بندی عددی ندارد. لینک‌هایی که فقط در پست‌ها دیده شده‌اند تا انتخاب شما خاموش‌اند؛ منبعی که هوش جستجوگر ۲ پیدا کند و هوش جستجوگر ۱ از آن ردیف معتبر بخواند، خودکار روشن می‌شود و از همین فهرست قابل خاموش‌کردن است. روبیکا ممکن است فقط معرفی کانال برگرداند؛ این وضعیت خطای خواندن پیام ثبت می‌شود، نه نرخ فرضی.',
+              style: TextStyle(fontSize: 11, color: muted, height: 1.8)),
+          OutlinedButton.icon(
+              onPressed: c.busy ? null : addSource,
+              icon: const Icon(Icons.add_link),
+              label: const Text('افزودن کانال عمومی')),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+                child: OutlinedButton.icon(
+                    onPressed: c.busy
+                        ? null
+                        : () async {
+                            await c.setAllEnabled(true);
+                            if (mounted) setState(() {});
+                          },
+                    icon: const Icon(Icons.toggle_on_outlined, size: 18),
+                    label: const Text('همه روشن'))),
+            const SizedBox(width: 8),
+            Expanded(
+                child: OutlinedButton.icon(
+                    onPressed: c.busy
+                        ? null
+                        : () async {
+                            await c.setAllEnabled(false);
+                            if (mounted) setState(() {});
+                          },
+                    icon: const Icon(Icons.toggle_off_outlined, size: 18),
+                    label: const Text('همه خاموش'))),
+          ]),
+          const SizedBox(height: 6),
+          const Text(
+              'همه روشن و همه خاموش روی همهٔ منابع همین فهرست اعمال می‌شود؛ منابع ثبت‌شده، منابع افزوده‌شده و یافته‌های هوش جستجوگر ۲ را با هم شامل می‌شود و جستجو/فیلتر شهر روی این دو دکمه اثری ندارد.',
+              style: TextStyle(fontSize: 10, color: muted, height: 1.8)),
+          const SizedBox(height: 6),
+          // Sources that share one name — the same seller on two networks — are
+          // one card: the name is written once and each route keeps its own
+          // switch, status and link underneath it.
+          for (final entry in grouped.entries)
+            Card(
+                margin: const EdgeInsets.only(bottom: 3),
+                child: _LazyExpansionTile(
+                    storageKey: 'source:${entry.key}',
+                    dense: true,
+                    visualDensity: const VisualDensity(vertical: -4),
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+                    leading: Icon(Icons.circle,
+                        size: 8,
+                        color: entry.value
+                                .every((e) => c.enabled.contains(e.id))
+                            ? teal
+                            : entry.value.any((e) => c.enabled.contains(e.id))
+                                ? Colors.orange
+                                : muted),
+                    title: Text(entry.key,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12)),
+                    subtitle: entry.value.length == 1
+                        ? null
+                        : Text('${fmt(entry.value.length)} منبع با همین نام',
+                            style: const TextStyle(fontSize: 10, color: muted)),
+                    childrenPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    builder: () => [
+                          for (final e in entry.value) ...[
+                            if (entry.value.length > 1)
+                              Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(e.url,
+                                      style: const TextStyle(
+                                          fontSize: 10, color: teal))),
+                            SwitchListTile(
+                                dense: true,
+                                title: const Text('دریافت از این منبع',
+                                    style: TextStyle(fontSize: 11)),
+                                value: c.enabled.contains(e.id),
+                                onChanged: c.busy
+                                    ? null
+                                    : (v) => c.setEnabled(e.id, v)),
+                            Align(
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                    '${c.states[e.id]?['message'] ?? 'هنوز آزموده نشده'}',
+                                    style: const TextStyle(fontSize: 11))),
+                            if (c.states[e.id]?['success_at'] != null)
+                              Text(
+                                  'آخرین دریافت موفق: ${dateLabel(DateTime.tryParse('${c.states[e.id]!['success_at']}'))}',
+                                  style: const TextStyle(
+                                      fontSize: 10, color: muted)),
+                            Text('شهر دفتر: ${e.sellerCity}',
+                                style: const TextStyle(
+                                    fontSize: 10, color: muted)),
+                            TextButton(
+                                onPressed: () => openLink(context, e.url),
+                                child: const Text('منبع اصلی',
+                                    style: TextStyle(fontSize: 11))),
+                          ]
+                        ])),
+          const SizedBox(height: 25),
+        ];
+    List<Widget> addressesSection() => [
+          const Text('فروشندگان بر اساس شهر',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          infoBox('دفتر فروش ≠ محل تولید',
+              'فهرست شهرهای ایران قابل جستجو است؛ وضعیت هر مدخل، نشانی رسمی را از خوداظهاری کانال یا سرنخ احرازنشده جدا می‌کند. برای شهر بدون داده، فروشنده یا قیمت فرضی تولید نمی‌شود. شکفته به عنوان تولیدکننده مشهد معرفی شده، نه دفتر فروش احراز‌شده.'),
+          const SizedBox(height: 12),
+          if (offices.isEmpty)
+            infoBox('دفتر تاییدشده‌ای در این فیلتر ثبت نشده',
+                'نبود داده، به معنی نبود فروشنده در شهر نیست. منابع با شهر نامشخص در فهرست عمومی منابع حفظ شده‌اند.'),
+          for (final s in offices)
+            Card(
+                margin: const EdgeInsets.only(bottom: 3),
+                child: _LazyExpansionTile(
+                    dense: true,
+                    visualDensity: const VisualDensity(vertical: -4),
+                    title: Text('${s['name']} • ${s['city']}',
+                        style: const TextStyle(fontSize: 12)),
+                    childrenPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    builder: () => [
+                          Text(s['address']!,
+                              style:
+                                  const TextStyle(fontSize: 11, height: 1.7)),
+                          Text(s['status']!,
+                              style:
+                                  const TextStyle(fontSize: 10, color: muted)),
+                          Wrap(children: [
+                            TextButton.icon(
+                                onPressed: () => openLink(context, s['url']!),
+                                icon: const Icon(Icons.language, size: 16),
+                                label: const Text('سایت')),
+                            if (s['phone']!.isNotEmpty)
+                              TextButton.icon(
+                                  onPressed: () =>
+                                      openLink(context, 'tel:${s['phone']}'),
+                                  icon: const Icon(Icons.phone_outlined,
+                                      size: 16),
+                                  label: Text(s['phone']!))
+                          ])
+                        ])),
+          const SizedBox(height: 24),
+          Text('فهرست تحقیق منابع • ${fmt(sites.length)} مدخل',
+              style:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          const Text(
+              'ثبت در فهرست با اتصال خودکار یکسان نیست. تنها اتصال‌های بالای صفحه مبدل فعال دارند.',
+              style: TextStyle(fontSize: 11, color: muted, height: 1.8)),
+          for (final s in sites)
+            Card(
+                child: _LazyExpansionTile(
+                    title: Text(s['name'],
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold)),
+                    dense: true,
+                    visualDensity: const VisualDensity(vertical: -4),
+                    childrenPadding: const EdgeInsets.all(16),
+                    builder: () => [
+                          Text(s['priority'],
+                              style:
+                                  const TextStyle(fontSize: 10, color: muted)),
+                          Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(s['coverage'],
+                                  style: const TextStyle(
+                                      fontSize: 12, height: 1.8))),
+                          const SizedBox(height: 8),
+                          Text(s['note'],
+                              style:
+                                  const TextStyle(fontSize: 12, height: 1.8)),
+                          TextButton.icon(
+                              onPressed: () => openLink(context, s['url']),
+                              icon: const Icon(Icons.open_in_new, size: 17),
+                              label: const Text('بازکردن منبع'))
+                        ])),
+          const SizedBox(height: 24),
+          const Text('پیام‌رسان‌های ایران و راه‌های فروش',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          infoBox('کانال، حساب فروش و واسطه جدا هستند',
+              'لینک معرفی‌شده با دریافت خودکار قیمت یکسان نیست. شهر نامشخص از روی شماره یا محل کارخانه حدس زده نمی‌شود. برخی لینک‌ها حساب تماس یا عضویت‌اند، نه کانال عمومی. فیلتر شهر و جستجوی همین صفحه روی فهرست زیر هم اعمال می‌شود.'),
+          selectField(
+              'پیام‌رسان',
+              platform,
+              {
+                '': 'همه پیام‌رسان‌ها',
+                for (final ch in c.registry['other_channels'] as List? ?? [])
+                  '${ch['platform']}': '${ch['platform']}'
+              },
+              (v) => setState(() => platform = v)),
+          const SizedBox(height: 10),
+          for (final ch in (c.registry['other_channels'] as List? ?? []).where(
+              (x) =>
+                  (platform.isEmpty || x['platform'] == platform) &&
+                  (city.isEmpty || (x['city'] ?? 'نامشخص') == city) &&
+                  (qNorm.isEmpty ||
+                      latin('${x['owner']} ${x['url']}').contains(qNorm))))
+            Card(
+                margin: const EdgeInsets.only(bottom: 3),
+                child: _LazyExpansionTile(
+                    dense: true,
+                    visualDensity: const VisualDensity(vertical: -4),
+                    title: Text('${ch['owner']} • ${ch['platform']}',
+                        style: const TextStyle(fontSize: 12)),
+                    childrenPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    builder: () => [
+                          Text(
+                              '${ch['city'] ?? 'نامشخص'} • ${ch['kind'] ?? 'لینک معرفی‌شده'}\n${ch['status']}',
+                              style:
+                                  const TextStyle(fontSize: 11, height: 1.7)),
+                          TextButton(
+                              onPressed: () => openLink(context, ch['url']),
+                              child: const Text('بازکردن منبع'))
+                        ])),
+          _LazyExpansionTile(
+              title: const Text('کانال‌های تلگرام تحقیق'),
+              builder: () => [
+                    for (final ch
+                        in (c.registry['telegram_channels'] as List? ?? [])
+                            .where((x) => inCity(x)))
+                      ListTile(
+                          title: Text('${ch['owner']} / ${ch['handle']}',
+                              style: const TextStyle(fontSize: 12)),
+                          subtitle: Text(
+                              '${ch['coverage']}\n${ch['status']} • مشاهده تحقیق: ${ch['latest_visible_date']}',
+                              style: const TextStyle(fontSize: 10)),
+                          trailing: const Icon(Icons.open_in_new, size: 16),
+                          onTap: () => openLink(context, ch['url']))
+                  ]),
+          _LazyExpansionTile(
+              title: const Text('لینک‌های محصول و کارخانه'),
+              builder: () => [
+                    for (final p in (c.registry['product_pages'] as List? ?? [])
+                        .where((x) => inCity(x)))
+                      ListTile(
+                          title: Text(p['title'],
+                              style: const TextStyle(fontSize: 12)),
+                          subtitle: Text(p['group'],
+                              style: const TextStyle(fontSize: 10)),
+                          trailing: const Icon(Icons.open_in_new, size: 16),
+                          onTap: () => openLink(context, p['url']))
+                  ]),
+        ];
     return ListView(padding: const EdgeInsets.all(20), children: [
       const Text('اطلاعات و منابع',
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
@@ -163,13 +434,19 @@ class _InfoPageState extends State<InfoPage> {
               style: TextStyle(fontSize: 12)),
           children: [
             Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: DropdownButtonFormField<String>(
                     value: c.externalScanMode ? 'external' : 'internal',
-                    decoration: const InputDecoration(labelText: 'روش دریافت قیمت'),
+                    decoration:
+                        const InputDecoration(labelText: 'روش دریافت قیمت'),
                     items: const [
-                      DropdownMenuItem(value: 'internal', child: Text('داخلی — اسکنرهای روی گوشی')),
-                      DropdownMenuItem(value: 'external', child: Text('خارجی — فقط اسکنر سرور')),
+                      DropdownMenuItem(
+                          value: 'internal',
+                          child: Text('داخلی — اسکنرهای روی گوشی')),
+                      DropdownMenuItem(
+                          value: 'external',
+                          child: Text('خارجی — فقط اسکنر سرور')),
                     ],
                     onChanged: c.busy || c.transferring
                         ? null
@@ -181,7 +458,9 @@ class _InfoPageState extends State<InfoPage> {
                             } catch (_) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('تغییر حالت هنگام اجرای اسکن ممکن نیست.')));
+                                  const SnackBar(
+                                      content: Text(
+                                          'تغییر حالت هنگام اجرای اسکن ممکن نیست.')));
                             }
                           })),
             if (c.externalScanMode)
@@ -318,241 +597,52 @@ class _InfoPageState extends State<InfoPage> {
           style: const TextStyle(fontSize: 11, color: muted)),
       infoBox('شهر فقط فیلتر نمایش است',
           'دفتر، بارگیری، محل تولید و اشاره صریح همان کالا بررسی می‌شوند؛ اطلاعات شهرهای دیگر نمایش یا محاسبه نمی‌شوند. دریافت از همه منابع فعال، مستقل از شهر ادامه دارد. شهر نامعلوم حدس زده نمی‌شود.'),
-      if (c.externalScanMode)
-        infoBox('جستجوی منابع در حالت خارجی غیرفعال است',
-            'در این حالت فقط فید قیمت سرور دریافت می‌شود و جستجوگرهای داخلی منبع یا پیشنهادهای کشف‌شده اجرا نمی‌شوند.')
-      else
-        _LazyExpansionTile(
-            title: const Text('هوش جستجوگر ۲ و فهرست منابع کشف‌شده'),
-            builder: () => [FinderPanel(c: c)]),
-      const Text('اتصال‌های قابل نوسازی',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-      const Text(
-          'فعالسازی منبع به معنی موفقیت دریافت نیست. مبلغ استخراج‌شده با واحد نامعلوم دیده می‌شود ولی تبدیل و رتبه‌بندی عددی ندارد. لینک‌هایی که فقط در پست‌ها دیده شده‌اند تا انتخاب شما خاموش‌اند؛ منبعی که هوش جستجوگر ۲ پیدا کند و هوش جستجوگر ۱ از آن ردیف معتبر بخواند، خودکار روشن می‌شود و از همین فهرست قابل خاموش‌کردن است. روبیکا ممکن است فقط معرفی کانال برگرداند؛ این وضعیت خطای خواندن پیام ثبت می‌شود، نه نرخ فرضی.',
-          style: TextStyle(fontSize: 11, color: muted, height: 1.8)),
-      OutlinedButton.icon(
-          onPressed: c.busy ? null : addSource,
-          icon: const Icon(Icons.add_link),
-          label: const Text('افزودن کانال عمومی')),
-      const SizedBox(height: 8),
+      const SizedBox(height: 6),
       Row(children: [
-        Expanded(
-            child: OutlinedButton.icon(
-                onPressed: c.busy
-                    ? null
-                    : () async {
-                        await c.setAllEnabled(true);
-                        if (mounted) setState(() {});
-                      },
-                icon: const Icon(Icons.toggle_on_outlined, size: 18),
-                label: const Text('همه روشن'))),
-        const SizedBox(width: 8),
-        Expanded(
-            child: OutlinedButton.icon(
-                onPressed: c.busy
-                    ? null
-                    : () async {
-                        await c.setAllEnabled(false);
-                        if (mounted) setState(() {});
-                      },
-                icon: const Icon(Icons.toggle_off_outlined, size: 18),
-                label: const Text('همه خاموش'))),
+        const Expanded(
+            child: Text('منابع و آدرس‌ها',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold))),
+        PopupMenuButton<String>(
+            tooltip: 'منابع کشف‌شده، منابع داخلی و آدرس‌ها',
+            onSelected: (key) {
+              final sections = <String, List<Widget> Function()>{
+                'discovered': discoveredSection,
+                'internal': internalSection,
+                'addresses': addressesSection,
+              };
+              final build = sections[key];
+              if (build == null) return;
+              showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (ctx) => SafeArea(
+                      child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                              maxHeight: MediaQuery.of(ctx).size.height * 0.85),
+                          child: SingleChildScrollView(
+                              key: const Key('info-section-sheet'),
+                              padding: const EdgeInsets.all(14),
+                              child: ListenableBuilder(
+                                  listenable:
+                                      Listenable.merge([widget.c, _sheetTick]),
+                                  builder: (ctx2, child) => Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: build()))))));
+            },
+            itemBuilder: (_) => const [
+                  PopupMenuItem(
+                      value: 'discovered', child: Text('منابع کشف‌شده')),
+                  PopupMenuItem(value: 'internal', child: Text('منابع داخلی')),
+                  PopupMenuItem(value: 'addresses', child: Text('آدرس‌ها')),
+                ],
+            child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('باز کردن', style: TextStyle(fontSize: 12, color: teal)),
+                  Icon(Icons.arrow_drop_down, size: 20, color: teal),
+                ]))),
       ]),
-      const SizedBox(height: 6),
-      const Text(
-          'همه روشن و همه خاموش روی همهٔ منابع همین فهرست اعمال می‌شود؛ منابع ثبت‌شده، منابع افزوده‌شده و یافته‌های هوش جستجوگر ۲ را با هم شامل می‌شود و جستجو/فیلتر شهر روی این دو دکمه اثری ندارد.',
-          style: TextStyle(fontSize: 10, color: muted, height: 1.8)),
-      const SizedBox(height: 6),
-      // Sources that share one name — the same seller on two networks — are
-      // one card: the name is written once and each route keeps its own
-      // switch, status and link underneath it.
-      for (final entry in grouped.entries)
-        Card(
-            margin: const EdgeInsets.only(bottom: 3),
-            child: _LazyExpansionTile(
-                storageKey: 'source:${entry.key}',
-                dense: true,
-                visualDensity: const VisualDensity(vertical: -4),
-                tilePadding: const EdgeInsets.symmetric(horizontal: 10),
-                leading: Icon(Icons.circle,
-                    size: 8,
-                    color: entry.value.every((e) => c.enabled.contains(e.id))
-                        ? teal
-                        : entry.value.any((e) => c.enabled.contains(e.id))
-                            ? Colors.orange
-                            : muted),
-                title: Text(entry.key,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12)),
-                subtitle: entry.value.length == 1
-                    ? null
-                    : Text('${fmt(entry.value.length)} منبع با همین نام',
-                        style: const TextStyle(fontSize: 10, color: muted)),
-                childrenPadding: const EdgeInsets.symmetric(horizontal: 12),
-                builder: () => [
-                  for (final e in entry.value) ...[
-                    if (entry.value.length > 1)
-                      Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Text(e.url,
-                              style:
-                                  const TextStyle(fontSize: 10, color: teal))),
-                    SwitchListTile(
-                        dense: true,
-                        title: const Text('دریافت از این منبع',
-                            style: TextStyle(fontSize: 11)),
-                        value: c.enabled.contains(e.id),
-                        onChanged:
-                            c.busy ? null : (v) => c.setEnabled(e.id, v)),
-                    Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                            '${c.states[e.id]?['message'] ?? 'هنوز آزموده نشده'}',
-                            style: const TextStyle(fontSize: 11))),
-                    if (c.states[e.id]?['success_at'] != null)
-                      Text(
-                          'آخرین دریافت موفق: ${dateLabel(DateTime.tryParse('${c.states[e.id]!['success_at']}'))}',
-                          style: const TextStyle(fontSize: 10, color: muted)),
-                    Text('شهر دفتر: ${e.sellerCity}',
-                        style: const TextStyle(fontSize: 10, color: muted)),
-                    TextButton(
-                        onPressed: () => openLink(context, e.url),
-                        child: const Text('منبع اصلی',
-                            style: TextStyle(fontSize: 11))),
-                  ]
-                ])),
-      const SizedBox(height: 25),
-      const Text('فروشندگان بر اساس شهر',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-      infoBox('دفتر فروش ≠ محل تولید',
-          'فهرست شهرهای ایران قابل جستجو است؛ وضعیت هر مدخل، نشانی رسمی را از خوداظهاری کانال یا سرنخ احرازنشده جدا می‌کند. برای شهر بدون داده، فروشنده یا قیمت فرضی تولید نمی‌شود. شکفته به عنوان تولیدکننده مشهد معرفی شده، نه دفتر فروش احراز‌شده.'),
-      const SizedBox(height: 12),
-      if (offices.isEmpty)
-        infoBox('دفتر تاییدشده‌ای در این فیلتر ثبت نشده',
-            'نبود داده، به معنی نبود فروشنده در شهر نیست. منابع با شهر نامشخص در فهرست عمومی منابع حفظ شده‌اند.'),
-      for (final s in offices)
-        Card(
-            margin: const EdgeInsets.only(bottom: 3),
-            child: _LazyExpansionTile(
-                dense: true,
-                visualDensity: const VisualDensity(vertical: -4),
-                title: Text('${s['name']} • ${s['city']}',
-                    style: const TextStyle(fontSize: 12)),
-                childrenPadding: const EdgeInsets.symmetric(horizontal: 12),
-                builder: () => [
-                  Text(s['address']!,
-                      style: const TextStyle(fontSize: 11, height: 1.7)),
-                  Text(s['status']!,
-                      style: const TextStyle(fontSize: 10, color: muted)),
-                  Wrap(children: [
-                    TextButton.icon(
-                        onPressed: () => openLink(context, s['url']!),
-                        icon: const Icon(Icons.language, size: 16),
-                        label: const Text('سایت')),
-                    if (s['phone']!.isNotEmpty)
-                      TextButton.icon(
-                          onPressed: () =>
-                              openLink(context, 'tel:${s['phone']}'),
-                          icon: const Icon(Icons.phone_outlined, size: 16),
-                          label: Text(s['phone']!))
-                  ])
-                ])),
-      const SizedBox(height: 24),
-      Text('فهرست تحقیق منابع • ${fmt(sites.length)} مدخل',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-      const Text(
-          'ثبت در فهرست با اتصال خودکار یکسان نیست. تنها اتصال‌های بالای صفحه مبدل فعال دارند.',
-          style: TextStyle(fontSize: 11, color: muted, height: 1.8)),
-      for (final s in sites)
-        Card(
-            child: _LazyExpansionTile(
-                title: Text(s['name'],
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.bold)),
-                dense: true,
-                visualDensity: const VisualDensity(vertical: -4),
-                childrenPadding: const EdgeInsets.all(16),
-                builder: () => [
-                  Text(s['priority'],
-                      style: const TextStyle(fontSize: 10, color: muted)),
-                  Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(s['coverage'],
-                          style: const TextStyle(fontSize: 12, height: 1.8))),
-                  const SizedBox(height: 8),
-                  Text(s['note'],
-                      style: const TextStyle(fontSize: 12, height: 1.8)),
-                  TextButton.icon(
-                      onPressed: () => openLink(context, s['url']),
-                      icon: const Icon(Icons.open_in_new, size: 17),
-                      label: const Text('بازکردن منبع'))
-                ])),
-      const SizedBox(height: 24),
-      const Text('پیام‌رسان‌های ایران و راه‌های فروش',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-      infoBox('کانال، حساب فروش و واسطه جدا هستند',
-          'لینک معرفی‌شده با دریافت خودکار قیمت یکسان نیست. شهر نامشخص از روی شماره یا محل کارخانه حدس زده نمی‌شود. برخی لینک‌ها حساب تماس یا عضویت‌اند، نه کانال عمومی. فیلتر شهر و جستجوی همین صفحه روی فهرست زیر هم اعمال می‌شود.'),
-      selectField(
-          'پیام‌رسان',
-          platform,
-          {
-            '': 'همه پیام‌رسان‌ها',
-            for (final ch in c.registry['other_channels'] as List? ?? [])
-              '${ch['platform']}': '${ch['platform']}'
-          },
-          (v) => setState(() => platform = v)),
-      const SizedBox(height: 10),
-      for (final ch in (c.registry['other_channels'] as List? ?? []).where(
-          (x) =>
-              (platform.isEmpty || x['platform'] == platform) &&
-              (city.isEmpty || (x['city'] ?? 'نامشخص') == city) &&
-              (qNorm.isEmpty ||
-                  latin('${x['owner']} ${x['url']}').contains(qNorm))))
-        Card(
-            margin: const EdgeInsets.only(bottom: 3),
-            child: _LazyExpansionTile(
-                dense: true,
-                visualDensity: const VisualDensity(vertical: -4),
-                title: Text('${ch['owner']} • ${ch['platform']}',
-                    style: const TextStyle(fontSize: 12)),
-                childrenPadding: const EdgeInsets.symmetric(horizontal: 12),
-                builder: () => [
-                  Text(
-                      '${ch['city'] ?? 'نامشخص'} • ${ch['kind'] ?? 'لینک معرفی‌شده'}\n${ch['status']}',
-                      style: const TextStyle(fontSize: 11, height: 1.7)),
-                  TextButton(
-                      onPressed: () => openLink(context, ch['url']),
-                      child: const Text('بازکردن منبع'))
-                ])),
-      _LazyExpansionTile(
-          title: const Text('کانال‌های تلگرام تحقیق'),
-          builder: () => [
-                for (final ch
-                    in (c.registry['telegram_channels'] as List? ?? [])
-                        .where((x) => inCity(x)))
-                  ListTile(
-                      title: Text('${ch['owner']} / ${ch['handle']}',
-                          style: const TextStyle(fontSize: 12)),
-                      subtitle: Text(
-                          '${ch['coverage']}\n${ch['status']} • مشاهده تحقیق: ${ch['latest_visible_date']}',
-                          style: const TextStyle(fontSize: 10)),
-                      trailing: const Icon(Icons.open_in_new, size: 16),
-                      onTap: () => openLink(context, ch['url']))
-              ]),
-      _LazyExpansionTile(
-          title: const Text('لینک‌های محصول و کارخانه'),
-          builder: () => [
-                for (final p in (c.registry['product_pages'] as List? ?? [])
-                    .where((x) => inCity(x)))
-                  ListTile(
-                      title: Text(p['title'],
-                          style: const TextStyle(fontSize: 12)),
-                      subtitle: Text(p['group'],
-                          style: const TextStyle(fontSize: 10)),
-                      trailing: const Icon(Icons.open_in_new, size: 16),
-                      onTap: () => openLink(context, p['url']))
-              ]),
       const SizedBox(height: 20),
       infoBox('حریم خصوصی و اعتبار',
           'بدون ورود، بدون توکن GitHub، بدون ارسال تاریخچه به سرور پروژه. اتصال مستقیم به سایت‌ها IP دستگاه را در اختیار همان سایت می‌گذارد. برای خرید، واحد، مالیات، موجودی، تسویه و حمل را با فروشنده تایید کنید.'),
@@ -604,11 +694,12 @@ class _LazyExpansionTileState extends State<_LazyExpansionTile> {
   Widget build(BuildContext context) {
     final stored = widget.storageKey == null
         ? null
-        : PageStorage.maybeOf(context)
-            ?.readState(context, identifier: PageStorageKey(widget.storageKey!));
+        : PageStorage.maybeOf(context)?.readState(context,
+            identifier: PageStorageKey(widget.storageKey!));
     final open = _expanded || stored == true;
     return ExpansionTile(
-      key: widget.storageKey == null ? null : PageStorageKey(widget.storageKey!),
+      key:
+          widget.storageKey == null ? null : PageStorageKey(widget.storageKey!),
       dense: widget.dense,
       visualDensity: widget.visualDensity,
       tilePadding: widget.tilePadding,
