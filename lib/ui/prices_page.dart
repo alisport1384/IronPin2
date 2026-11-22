@@ -477,7 +477,17 @@ void showQuoteDetails(BuildContext context, Quote q, VoidCallback onChart) {
                   children: [
                     UnitPrices(q: q),
                     const SizedBox(height: 12),
+                    if (q.specificationLabel.isNotEmpty)
+                      Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(faDigits(q.specificationLabel),
+                              style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: teal))),
                     Text(faDigits(q.title),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,

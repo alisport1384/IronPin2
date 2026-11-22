@@ -124,7 +124,8 @@ class _RangePageState extends State<RangePage> {
       children: [
         for (final p in catalog.take(catalogVisible))
           ListTile(
-            title: Text(faDigits(p.example.title)),
+            title: Text(faDigits(shortTitle(p.example.title)),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
             // Every candidate carries the price the archive actually holds
             // for it, in the unit that price was announced with: a row is
             // never offered without its number.
@@ -158,7 +159,8 @@ class _RangePageState extends State<RangePage> {
             onTap: () => showDialog<void>(
                 context: context,
                 builder: (context) => AlertDialog(
-                      title: Text(faDigits(p.example.title)),
+                      title: Text(faDigits(shortTitle(p.example.title)),
+                          maxLines: 3, overflow: TextOverflow.ellipsis),
                       content: SingleChildScrollView(
                           child: Text(faDigits(
                               '${p.example.specificationLabel}\n${p.example.seller}\n${dateLabel(p.example.marketAt)}\n${p.counted ? 'در آمار همین واحد حساب شده است؛ میانگین، بالاترین و پایین‌ترین از همین فهرست گرفته می‌شود' : rangeUnavailableReasons(p.example, result!.at).join('؛ ')}\nاین نمایش از آرشیو محلی است؛ برای بازهٔ انتخاب‌شده محاسبه شده است.'))),
@@ -567,7 +569,8 @@ class _RangePageState extends State<RangePage> {
           for (final q in shown.take(visible))
             ListTile(
                 dense: true,
-                title: Text(faDigits(q.title)),
+                title: Text(faDigits(shortTitle(q.title)),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Text(
                     '${q.amount == null ? (q.details['مبلغ استخراج‌شده'] ?? 'تماس / مبلغ نامعلوم') : fmt(toman(q.amount, q.currency) != null ? TaxPolicy.apply(toman(q.amount, q.currency)!) : q.amount, decimals: 2)} ${toman(q.amount, q.currency) == null ? q.currency : 'تومان'} / ${q.unitName(q.unit)}\n${faDigits(q.specificationLabel)}\n${dateLabel(q.marketAt)} • ${faDigits(q.seller)}\n${faDigits(q.tax)} • ${faDigits(q.terms)}',
                     style: const TextStyle(fontSize: 11)),
@@ -605,7 +608,7 @@ class _RangePageState extends State<RangePage> {
 String _cardIdentity(Quote q) {
   final spec = q.specificationLabel;
   final parts = <String>[
-    q.title,
+    shortTitle(q.title),
     if (spec.isNotEmpty) spec,
     if (q.seller.isNotEmpty) q.seller,
     if (spec.isEmpty && q.seller.isEmpty) q.category,

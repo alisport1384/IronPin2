@@ -111,6 +111,7 @@ Widget emptyState(String title, String detail,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: muted, height: 1.9))
             ])));
+
 /// The time windows offered by every tab, in days (`0` = the whole archive).
 const windowLabels = <String, String>{
   '0': 'همه زمان‌ها',
@@ -191,3 +192,14 @@ Widget selectField(String label, String value, Map<String, String> options,
         });
 String sourceDay(Quote q) =>
     q.sourceDateRaw.isEmpty ? 'تاریخ نرخ نامشخص' : q.sourceDateRaw;
+
+/// Titles are frequently whole scraped posts; cards keep a bounded slice so
+/// the specification and the seller stay visible next to it.
+String shortTitle(String title, [int max = 90]) {
+  if (title.length <= max) return title;
+  var end = max;
+  // Never split a surrogate pair (emoji survive in scraped titles).
+  final unit = title.codeUnitAt(end);
+  if (unit >= 0xDC00 && unit <= 0xDFFF) end--;
+  return '${title.substring(0, end).trimRight()}…';
+}
