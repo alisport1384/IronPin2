@@ -233,8 +233,13 @@ class MarketController extends ChangeNotifier {
 
   /// One slice of the list builder, now. Never runs on top of a refresh.
   Future<FinderReport?> runFinderNow({int maxSteps = 10}) async {
-    if (disposed || externalScanMode || busy || transferring || finder.running)
+    if (disposed ||
+        externalScanMode ||
+        busy ||
+        transferring ||
+        finder.running) {
       return null;
+    }
     try {
       final report = await finder.runSlice(
           maxSteps: maxSteps,
@@ -726,8 +731,9 @@ class MarketController extends ChangeNotifier {
 
   void _ensureQuotesMeta() {
     final id = identityHashCode(quotes);
-    if (id == _quotesMetaIdentity && _quotesById.length == quotes.length)
+    if (id == _quotesMetaIdentity && _quotesById.length == quotes.length) {
       return;
+    }
     _quotesMetaIdentity = id;
     final byId = <String, Quote>{};
     final cats = <String>{};

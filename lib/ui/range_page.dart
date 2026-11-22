@@ -35,8 +35,9 @@ String candidatePriceTextOf(Quote q) {
     return '${fmt(TaxPolicy.apply(own))} تومان • واحد نامشخص';
   }
   final amount = q.amount;
-  if (amount != null && amount > 0)
+  if (amount != null && amount > 0) {
     return '${fmt(amount)} ${faDigits(q.currency)}';
+  }
   return faDigits(q.details['مبلغ استخراج‌شده'] ?? 'بدون قیمت');
 }
 
