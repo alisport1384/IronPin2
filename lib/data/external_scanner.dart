@@ -8,6 +8,11 @@ import '../domain/market.dart';
 const defaultExternalScannerUrl = 'https://qwen.alisport0.qzz.io/api/ironpin';
 const maxExternalScannerBytes = 32 * 1024 * 1024;
 
+/// Bump when the server feed is pruned or reshaped (e.g. junk gates): the
+/// next refresh then performs one full snapshot fetch with replaceMissing so
+/// rows the server no longer serves also leave the phone's archive.
+const externalFeedResyncEpoch = '1';
+
 class ExternalQuoteBatch {
   final List<Quote> quotes;
   final int cursor;
@@ -36,22 +41,28 @@ class ExternalScanner {
     } else {
       params.remove('since');
     }
-    final request = http.Request('GET', endpoint.replace(queryParameters: params))
-      ..headers['Accept'] = 'application/json';
-    final response = await client.send(request).timeout(const Duration(seconds: 75));
+    final request =
+        http.Request('GET', endpoint.replace(queryParameters: params))
+          ..headers['Accept'] = 'application/json';
+    final response =
+        await client.send(request).timeout(const Duration(seconds: 75));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw FormatException('دریافت اسکنر خارجی ناموفق بود (HTTP ${response.statusCode}).');
+      throw FormatException(
+          'دریافت اسکنر خارجی ناموفق بود (HTTP ${response.statusCode}).');
     }
     final declared = response.contentLength;
     if (declared != null && declared > maxExternalScannerBytes) {
-      throw const FormatException('خروجی اسکنر از سقف ایمن دریافت بزرگ‌تر است.');
+      throw const FormatException(
+          'خروجی اسکنر از سقف ایمن دریافت بزرگ‌تر است.');
     }
     final bytes = BytesBuilder(copy: false);
     var total = 0;
-    await for (final part in response.stream.timeout(const Duration(seconds: 75))) {
+    await for (final part
+        in response.stream.timeout(const Duration(seconds: 75))) {
       total += part.length;
       if (total > maxExternalScannerBytes) {
-        throw const FormatException('خروجی اسکنر از سقف ایمن دریافت بزرگ‌تر است.');
+        throw const FormatException(
+            'خروجی اسکنر از سقف ایمن دریافت بزرگ‌تر است.');
       }
       bytes.add(part);
     }

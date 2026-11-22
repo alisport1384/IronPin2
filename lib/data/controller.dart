@@ -1564,7 +1564,14 @@ class MarketController extends ChangeNotifier {
     historyRevision++;
     _notify();
     try {
-      final saved = int.tryParse(await store.setting('external.cursor') ?? '');
+      // A pruned server feed must also leave the phone's archive: when the
+      // feed epoch changed, one full snapshot fetch (no `since`) runs with
+      // replaceMissing so retired local rows disappear from current offers.
+      final needsFullResync = await store.setting('external.resyncEpoch') !=
+          externalFeedResyncEpoch;
+      final saved = needsFullResync
+          ? null
+          : int.tryParse(await store.setting('external.cursor') ?? '');
       final batch = await ExternalScanner.fetch(client.client,
           url: externalScannerUrl, since: saved);
       final replaceFullSnapshot = saved == null && batch.complete;
@@ -1577,6 +1584,9 @@ class MarketController extends ChangeNotifier {
       }
       if (batch.complete && batch.cursor > 0) {
         await store.setSetting('external.cursor', '${batch.cursor}');
+      }
+      if (batch.complete) {
+        await store.setSetting('external.resyncEpoch', externalFeedResyncEpoch);
       }
       finished = 1;
       await store.setSetting(
