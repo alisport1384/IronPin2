@@ -429,7 +429,7 @@ class _RangePageState extends State<RangePage> {
             'پیش‌فرض حداقلی است؛ فقط فیلدهایی را که می‌خواهید محدود شوند تکمیل کنید. مشخصات خالی شامل همه انواع و کارخانه‌هاست.',
             style: TextStyle(fontSize: 12)),
         if (family != null && productDefinitions.containsKey(family))
-          infoBox('تعریف \$family', productDefinitions[family]!),
+          infoBox('تعریف $family', productDefinitions[family]!),
         if (family == 'بولت')
           infoBox('مقایسه تخصصی بولت و انکربولت',
               'مشخصات ناقص در اعلام‌ها می‌ماند ولی وارد میانگین نمی‌شود. نوع، قطر، طول، طول و گام رزوه، جنس، گرید، پوشش و شمول متعلقات لازم است؛ انکر مکانیکی/شیمیایی به مدل و عمق کاشت صریح هم نیاز دارد. اختلاف مشخصات در گروه‌های جدا محاسبه می‌شود. این رنج، ظرفیت باربری یا مجوز جایگزینی انکرها نیست.'),
