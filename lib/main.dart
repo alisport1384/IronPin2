@@ -276,31 +276,48 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                     ]))
               ]),
               actions: [
-                IconButton(
-                    tooltip: 'نوسازی قیمت‌ها',
-                    // Say what happened. A blocked refresh used to return
-                    // silently, so the button looked broken once the archive
-                    // had data.
-                    onPressed: c.busy || c.transferring
+                GestureDetector(
+                    onLongPress: c.busy || c.transferring
                         ? null
                         : () async {
-                            await c.refresh();
+                            await c.refresh(forceAll: true);
                             if (!context.mounted) return;
                             final reason = c.refreshBlockedReason;
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                 duration: const Duration(seconds: 5),
                                 content: Text(reason.isEmpty
-                                    ? 'نوسازی انجام شد.'
+                                    ? 'نوسازی کامل همه منابع انجام شد.'
                                     : reason)));
                           },
-                    icon: c.busy
-                        ? const RepaintBoundary(
-                            child: SizedBox(
-                                height: 21,
-                                width: 21,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white70)))
-                        : const Icon(Icons.sync)),
+                    child: IconButton(
+                        tooltip: 'نوسازی قیمت‌ها',
+                        // Say what happened. A blocked refresh used to return
+                        // silently, so the button looked broken once the archive
+                        // had data.
+                        onPressed: c.busy || c.transferring
+                            ? null
+                            : () async {
+                                await c.refresh();
+                                if (!context.mounted) return;
+                                final reason = c.refreshBlockedReason;
+                                final summary = reason.isNotEmpty
+                                    ? reason
+                                    : c.refreshSkipped > 0
+                                        ? 'نوسازی انجام شد (${fmt(c.refreshTotal)} منبع بررسی شد • ${fmt(c.refreshSkipped)} منبع تازه رد شد).'
+                                        : 'نوسازی انجام شد.';
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                        duration: const Duration(seconds: 5),
+                                        content: Text(summary)));
+                              },
+                        icon: c.busy
+                            ? const RepaintBoundary(
+                                child: SizedBox(
+                                    height: 21,
+                                    width: 21,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white70)))
+                            : const Icon(Icons.sync))),
                 const SizedBox(width: 8)
               ],
               bottom: PreferredSize(
@@ -319,7 +336,7 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                                           ? (c.externalTotalSources > 0
                                               ? 'اسکن منابع سرور ${fmt(c.finished)} / ${fmt(c.externalTotalSources)}'
                                               : 'دریافت فهرست منابع از سرور')
-                                          : 'دریافت منابع ${fmt(c.finished)} / ${fmt(c.enabled.length)}')
+                                          : 'دریافت منابع ${fmt(c.finished)} / ${fmt(c.refreshTotal > 0 ? c.refreshTotal : c.enabled.length)}')
                                       : (c.externalScanMode
                                           ? '${fmt(c.quotes.length)} ردیف • منابع سرور'
                                           : '${fmt(c.quotes.length)} ردیف ذخیره‌شده روی دستگاه'),

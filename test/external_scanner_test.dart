@@ -164,4 +164,145 @@ void main() {
       await store.close();
     }
   });
+
+  test(
+      'planRefreshQueue puts unseen candidates first, skips fresh sources when skipFresh=true, and orders stale oldest-first',
+      () {
+    final now = DateTime.utc(2026, 11, 23, 12, 0);
+    final eps = [
+      const SourceEndpoint('fresh', 'تازه', 'https://a.example', 'عمومی', 'site-table', 'تهران'),
+      const SourceEndpoint('stale_new', 'قدیمی‌تر', 'https://b.example', 'عمومی', 'site-table', 'تهران'),
+      const SourceEndpoint('stale_old', 'خیلی قدیمی', 'https://c.example', 'عمومی', 'site-table', 'تهران'),
+      const SourceEndpoint('failed', 'خطادار', 'https://d.example', 'عمومی', 'site-table', 'تهران'),
+      const SourceEndpoint('unseen', 'کاندید جدید', 'https://e.example', 'عمومی', 'site-table', 'تهران'),
+    ];
+    final sync = <String, Map<String, Object?>>{
+      'fresh': {
+        'success_at': now.subtract(const Duration(minutes: 10)).toIso8601String(),
+        'attempted_at': now.subtract(const Duration(minutes: 10)).toIso8601String(),
+      },
+      'stale_new': {
+        'success_at': now.subtract(const Duration(minutes: 45)).toIso8601String(),
+        'attempted_at': now.subtract(const Duration(minutes: 45)).toIso8601String(),
+      },
+      'stale_old': {
+        'success_at': now.subtract(const Duration(hours: 3)).toIso8601String(),
+        'attempted_at': now.subtract(const Duration(hours: 3)).toIso8601String(),
+      },
+      'failed': {
+        'success_at': null,
+        'attempted_at': now.subtract(const Duration(minutes: 5)).toIso8601String(),
+      },
+    };
+
+    final smart = MarketController.planRefreshQueue(eps, sync,
+        skipFresh: true, now: now);
+    expect(smart.skippedFresh, 1);
+    expect(smart.queue.map((e) => e.id).toList(),
+        ['unseen', 'failed', 'stale_old', 'stale_new']);
+
+    final forced = MarketController.planRefreshQueue(eps, sync,
+        skipFresh: false, now: now);
+    expect(forced.skippedFresh, 0);
+    expect(forced.queue.map((e) => e.id).toList(),
+        ['unseen', 'failed', 'stale_old', 'stale_new', 'fresh']);
+  });
+
+  test(
+      'external refresh (x > 1) skips recently updated sources and prioritizes new ones unless forceAll=true',
+      () async {
+    final store = await MarketStore.open(
+        dbPath: inMemoryDatabasePath, factory: databaseFactoryFfi);
+    var round = 1;
+    final hits = <String, int>{};
+    const html1 = '''
+      <html><body><h2>قیمت میلگرد 16</h2>
+      <table><thead><tr><th>محصول</th><th>سایز</th><th>واحد</th><th>قیمت (تومان)</th></tr></thead>
+      <tbody><tr><td>میلگرد آجدار</td><td>16</td><td>کیلوگرم</td><td>28500</td></tr></tbody></table>
+      </body></html>''';
+    const html2 = '''
+      <html><body><h2>قیمت تیرآهن 14</h2>
+      <table><thead><tr><th>محصول</th><th>سایز</th><th>واحد</th><th>قیمت (تومان)</th></tr></thead>
+      <tbody><tr><td>تیرآهن</td><td>14</td><td>کیلوگرم</td><td>31200</td></tr></tbody></table>
+      </body></html>''';
+
+    final client = MockClient((request) async {
+      final url = request.url.toString();
+      hits[url] = (hits[url] ?? 0) + 1;
+      if (request.url.path == '/api/sources') {
+        final list = [
+          {
+            'key': 'site:s1.example/p',
+            'url': 'https://s1.example/p',
+            'kind': 'site',
+            'part': 0,
+            'readable': true,
+            'name': 'فروشنده اول',
+            'city': 'تهران',
+          },
+          if (round >= 2)
+            {
+              'key': 'site:s2.example/p',
+              'url': 'https://s2.example/p',
+              'kind': 'site',
+              'part': 0,
+              'readable': true,
+              'name': 'کاندید جدید',
+              'city': 'مشهد',
+            },
+        ];
+        return http.Response.bytes(
+            utf8.encode(jsonEncode({
+              'format': 'ironpin-sources-v1',
+              'epoch': 1,
+              'round': round,
+              'sources': list,
+            })),
+            200,
+            headers: {'content-type': 'application/json'});
+      }
+      if (url == 'https://s1.example/p') {
+        return http.Response.bytes(utf8.encode(html1), 200,
+            headers: {'content-type': 'text/html; charset=utf-8'});
+      }
+      if (url == 'https://s2.example/p') {
+        return http.Response.bytes(utf8.encode(html2), 200,
+            headers: {'content-type': 'text/html; charset=utf-8'});
+      }
+      return http.Response('not found', 404);
+    });
+
+    final c = MarketController(store, client: SourceClient(client: client));
+    c.externalScanMode = true;
+    try {
+      // Round 1: only s1 exists -> fetched once
+      await c.refresh();
+      expect(hits['https://s1.example/p'], 1);
+      expect(hits['https://s2.example/p'], isNull);
+
+      // Round 2 (x > 1): s1 is fresh (< 30 min) so skipped; new s2 is fetched
+      round = 2;
+      await c.refresh();
+      expect(hits['https://s1.example/p'], 1);
+      expect(hits['https://s2.example/p'], 1);
+      expect(c.refreshSkipped, 1);
+      expect(c.refreshTotal, 1);
+
+      // Round 3: both fresh -> skipped quickly unless forceAll=true
+      await c.refresh();
+      expect(hits['https://s1.example/p'], 1);
+      expect(hits['https://s2.example/p'], 1);
+      expect(c.refreshSkipped, 2);
+      expect(c.refreshBlockedReason, contains('نگه دارید'));
+
+      // Round 4 with forceAll=true -> overwrites both
+      await c.refresh(forceAll: true);
+      expect(hits['https://s1.example/p'], 2);
+      expect(hits['https://s2.example/p'], 2);
+      expect(c.refreshSkipped, 0);
+    } finally {
+      c.dispose();
+      await store.close();
+    }
+  });
 }

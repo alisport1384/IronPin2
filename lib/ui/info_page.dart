@@ -466,8 +466,28 @@ class _InfoPageState extends State<InfoPage> {
             if (c.externalScanMode)
               Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: infoBox('منابع سرور آیرون‌پین (جستجوگر ۲ آنلاین)',
-                      'هوش جستجوگر ۲ روی گوشی غیرفعال است. هنگام نوسازی، فهرست منابع تاییدشده از سرور دریافت می‌شود و جستجوگر ۱ به همراه OCR فقط روی همان منابع اجرا می‌گردد. نشانی API: ${c.externalScannerUrl}')),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        infoBox('منابع سرور آیرون‌پین (جستجوگر ۲ آنلاین)',
+                            'هوش جستجوگر ۲ روی گوشی غیرفعال است. هنگام نوسازی، منابع جدید در اولویت اول دریافت می‌شوند و منابعی که در ۳۰ دقیقه اخیر با موفقیت به‌روزرسانی شده‌اند به‌صورت خودکار رد می‌شوند (برای اسکن کامل از ابتدا، دکمه نوسازی بالا را نگه دارید). نشانی API: ${c.externalScannerUrl}'),
+                        const SizedBox(height: 6),
+                        OutlinedButton.icon(
+                            onPressed: c.busy || c.transferring
+                                ? null
+                                : () async {
+                                    await c.refresh(forceAll: true);
+                                    if (!context.mounted) return;
+                                    final reason = c.refreshBlockedReason;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                            content: Text(reason.isEmpty
+                                                ? 'نوسازی کامل همه منابع سرور انجام شد.'
+                                                : reason)));
+                                  },
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('نوسازی کامل از ابتدا (بدون رد کردن)')),
+                      ])),
             SwitchListTile(
                 title: const Text('اسکن دوره‌ای در پس‌زمینه'),
                 subtitle: const Text(

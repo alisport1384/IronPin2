@@ -52,6 +52,9 @@ class MarketController extends ChangeNotifier {
   double taxPercent = 13;
   String externalScannerUrl = defaultExternalScannerUrl;
   int externalTotalSources = 0;
+  int refreshTotal = 0;
+  int refreshSkipped = 0;
+  static const Duration defaultFreshSkipWindow = Duration(minutes: 30);
   FinderReport? finderReport;
   Timer? _finderTimer;
   StreamSubscription<dynamic>? _networkSub;
@@ -1532,7 +1535,52 @@ class MarketController extends ChangeNotifier {
     _notify();
   }
 
-  Future<void> _refreshExternal() async {
+  static ({List<SourceEndpoint> queue, int skippedFresh}) planRefreshQueue(
+    List<SourceEndpoint> raw,
+    Map<String, Map<String, Object?>> sync, {
+    required bool skipFresh,
+    Duration freshWindow = defaultFreshSkipWindow,
+    DateTime? now,
+  }) {
+    final nowUtc = (now ?? DateTime.now()).toUtc();
+    final unseen = <SourceEndpoint>[];
+    final failedBefore = <({SourceEndpoint ep, DateTime? tried})>[];
+    final stale = <({SourceEndpoint ep, DateTime ok})>[];
+    var skippedFresh = 0;
+
+    for (final e in raw) {
+      final row = sync[e.id];
+      final ok = DateTime.tryParse('${row?['success_at'] ?? ''}')?.toUtc();
+      final tried =
+          DateTime.tryParse('${row?['attempted_at'] ?? ''}')?.toUtc();
+      if (ok != null) {
+        if (skipFresh && nowUtc.difference(ok) < freshWindow) {
+          skippedFresh++;
+          continue;
+        }
+        stale.add((ep: e, ok: ok));
+      } else if (tried == null) {
+        unseen.add(e);
+      } else {
+        failedBefore.add((ep: e, tried: tried));
+      }
+    }
+    failedBefore.sort((a, b) =>
+        (a.tried ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true))
+            .compareTo(
+                b.tried ?? DateTime.fromMillisecondsSinceEpoch(0, isUtc: true)));
+    stale.sort((a, b) => a.ok.compareTo(b.ok));
+    return (
+      queue: [
+        ...unseen,
+        ...failedBefore.map((x) => x.ep),
+        ...stale.map((x) => x.ep),
+      ],
+      skippedFresh: skippedFresh,
+    );
+  }
+
+  Future<void> _refreshExternal({bool forceAll = false}) async {
     refreshBlockedReason = '';
     if (busy || transferring || disposed) {
       refreshBlockedReason = busy ? 'نوسازی همین حالا در حال اجراست.' : '';
@@ -1572,17 +1620,30 @@ class MarketController extends ChangeNotifier {
     historyRevision++;
     finished = 0;
     externalTotalSources = 0;
+    refreshTotal = 0;
+    refreshSkipped = 0;
     _notify();
     try {
       if (!_quotesLoaded) await reload();
       final batch = await ExternalScanner.fetchSources(client.client,
           url: externalScannerUrl);
-      final queue = batch.sources;
+      final sync = await store.syncStates();
+      final plan = planRefreshQueue(
+        batch.sources,
+        sync,
+        skipFresh: !forceAll,
+      );
+      final queue = plan.queue;
+      refreshSkipped = plan.skippedFresh;
       externalTotalSources = queue.length;
+      refreshTotal = queue.length;
       _notify();
 
-      if (queue.isEmpty) {
+      if (batch.sources.isEmpty) {
         refreshBlockedReason = 'سرور هنوز منبع قابل‌خواندنی کشف نکرده است.';
+      } else if (queue.isEmpty && refreshSkipped > 0) {
+        refreshBlockedReason =
+            'همهٔ $refreshSkipped منبع در ۳۰ دقیقه اخیر به‌روزرسانی شده‌اند؛ برای نوسازی اجباری از ابتدا، دکمه نوسازی را نگه دارید.';
       } else {
         var index = 0;
         Future<void> worker() async {
@@ -1678,7 +1739,7 @@ class MarketController extends ChangeNotifier {
     }
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool forceAll = false}) async {
     refreshBlockedReason = '';
     if (busy || transferring || disposed) {
       refreshBlockedReason = busy ? 'نوسازی همین حالا در حال اجراست.' : '';
@@ -1695,7 +1756,7 @@ class MarketController extends ChangeNotifier {
       if (busy || disposed) return;
     }
     if (externalScanMode) {
-      await _refreshExternal();
+      await _refreshExternal(forceAll: forceAll);
       return;
     }
     String? refreshLock;
@@ -1747,9 +1808,17 @@ class MarketController extends ChangeNotifier {
     unawaited(AppLogger.instance
         .record('network', 'refresh_started', {'sources': enabled.length}));
     finished = 0;
+    refreshTotal = 0;
+    refreshSkipped = 0;
     _notify();
-    final queue =
-        availableEndpoints.where((e) => enabled.contains(e.id)).toList();
+    final sync = await store.syncStates();
+    final planned = planRefreshQueue(
+      availableEndpoints.where((e) => enabled.contains(e.id)).toList(),
+      sync,
+      skipFresh: false,
+    );
+    final queue = planned.queue;
+    refreshTotal = queue.length;
     // The completed lists of هوش جستجوگر ۲ are handed over here, a few entries
     // per refresh: each is read by the same reader and judged by the same
     // searcher as every other source, and only one that yields a valid row
@@ -1783,6 +1852,8 @@ class MarketController extends ChangeNotifier {
         AppLogger.instance.capture(error, stack, section: 'finder');
       }
     }
+    refreshTotal = queue.length;
+    _notify();
     Future<void> answer(SourceEndpoint e, int rows, String note) async {
       final key = handoff[e.id];
       if (key == null) return;
