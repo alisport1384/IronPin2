@@ -121,7 +121,7 @@ class ExternalScanner {
           );
         }
         if (ep == null) continue;
-        final cKey = endpointCanonicalKey(ep);
+        final cKey = canonicalUrlKey(ep.url);
         if (seenIds.add(ep.id) && seenKeys.add(cKey)) {
           out.add(ep);
         }
