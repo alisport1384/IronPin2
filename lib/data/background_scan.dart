@@ -194,7 +194,7 @@ Future<bool> runFinderBackground({bool onConnect = false}) async {
 }
 
 Future<bool> _runExternalBackground(
-    MarketStore store, SourceClient client) async {
+    MarketStore store, SourceClient client, PhotoScanner photos) async {
   String? lease;
   Timer? heartbeat;
   try {
@@ -202,24 +202,61 @@ Future<bool> _runExternalBackground(
     if (lease == null) return true;
     heartbeat = Timer.periodic(MarketStore.refreshLockHeartbeat,
         (_) => unawaited(store.renewRefreshLock(lease!)));
-    final saved = int.tryParse(await store.setting('external.cursor') ?? '');
-    final url = await store.setting('external.scanner.url') ??
-        defaultExternalScannerUrl;
-    final batch = await ExternalScanner.fetch(client.client,
-        url: url, since: saved);
-    final replaceFullSnapshot = saved == null && batch.complete;
-    if (batch.quotes.isNotEmpty || replaceFullSnapshot) {
-      await store.saveSnapshot('qwen-scanner', batch.quotes,
-          replaceMissing: replaceFullSnapshot);
-    }
-    if (batch.complete && batch.cursor > 0) {
-      await store.setSetting('external.cursor', '${batch.cursor}');
+    final savedUrl = (await store.setting('external.scanner.url'))?.trim() ?? '';
+    final url = savedUrl.isEmpty || savedUrl.endsWith('/api/ironpin')
+        ? defaultExternalScannerUrl
+        : savedUrl;
+    final serverBatch =
+        await ExternalScanner.fetchSources(client.client, url: url);
+    if (serverBatch.sources.isEmpty) return true;
+    final cursor =
+        int.tryParse(await store.setting('externalBackgroundCursor') ?? '') ??
+            0;
+    final batch = selectScanBatch(serverBatch.sources, cursor, size: 16);
+    var completed = 0;
+    final days = int.tryParse(await store.setting('windowDays') ?? '') ?? 30;
+    for (final endpoint in batch.sources) {
+      try {
+        final fetched =
+            await client.fetch(endpoint, windowDays: days, pageLimit: 2);
+        final photoBatch = await readPostPhotos(fetched, photos,
+            defaultCurrency: endpoint.defaultCurrency);
+        if (photoBatch.read > 0) {
+          await store.setSetting('lastPhotoScanCount', '${photoBatch.read}');
+        }
+        final quotes = photoBatch.rows;
+        final found = quotes.isEmpty
+            ? const SearcherResult([])
+            : await Searcher.processAsync(quotes,
+                now: DateTime.now(),
+                windowDays: days,
+                resolver: MapsResolver(client.client));
+        if (found.quotes.isEmpty) {
+          await store.note(
+              endpoint.id,
+              quotes.isEmpty
+                  ? 'اسکن پس‌زمینه ردیف قیمتی پیدا نکرد؛ داده قبلی حفظ شد.'
+                  : 'ردیف قابل‌ثبت نبود (بیرون از بازه: ${found.outOfWindow} • '
+                      'بی‌قیمت/بی‌محصول: ${found.noise})؛ داده قبلی حفظ شد.');
+          continue;
+        }
+        await store.saveSnapshot(endpoint.id, found.quotes,
+            replaceMissing: client.complete[endpoint.id] ?? true);
+        completed++;
+      } catch (error) {
+        await store.failure(
+            endpoint.id,
+            error is FormatException
+                ? error.message
+                : 'خطا در اسکن پس‌زمینه؛ داده قبلی حفظ شد.');
+      }
     }
     final now = DateTime.now().toUtc().toIso8601String();
     await store.setSettings({
+      'externalBackgroundCursor': '${batch.nextCursor}',
       'lastRefresh': now,
       'lastBackgroundScan': now,
-      'lastBackgroundScanCount': '${batch.quotes.length}',
+      'lastBackgroundScanCount': '$completed',
     });
     return true;
   } catch (_) {
@@ -250,7 +287,7 @@ Future<bool> runBackgroundScan() async {
     store = await MarketStore.open();
     if (await store.setting('autoRefresh') != 'true') return true;
     if (await store.setting('scan.mode') == 'external') {
-      return await _runExternalBackground(store, client);
+      return await _runExternalBackground(store, client, photos);
     }
     final rawEnabled = await store.setting('enabled');
     final enabledIds = rawEnabled == null

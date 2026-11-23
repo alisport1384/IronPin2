@@ -316,10 +316,12 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                               child: Text(
                                   c.busy
                                       ? (c.externalScanMode
-                                          ? 'دریافت از سرور خارجی'
+                                          ? (c.externalTotalSources > 0
+                                              ? 'اسکن منابع سرور ${fmt(c.finished)} / ${fmt(c.externalTotalSources)}'
+                                              : 'دریافت فهرست منابع از سرور')
                                           : 'دریافت منابع ${fmt(c.finished)} / ${fmt(c.enabled.length)}')
                                       : (c.externalScanMode
-                                          ? 'به سرور خارجی'
+                                          ? '${fmt(c.quotes.length)} ردیف • منابع سرور'
                                           : '${fmt(c.quotes.length)} ردیف ذخیره‌شده روی دستگاه'),
                                   style: const TextStyle(
                                       color: Colors.white70, fontSize: 10),
@@ -333,7 +335,7 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                                   borderRadius: BorderRadius.circular(6)),
                               child: Text(
                                   c.externalScanMode
-                                      ? 'سرور خارجی'
+                                      ? 'منابع سرور'
                                       : 'بدون سرور',
                                   style: const TextStyle(
                                       fontSize: 10, color: Colors.white60)))

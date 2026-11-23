@@ -51,6 +51,7 @@ class MarketController extends ChangeNotifier {
   bool taxEnabled = false;
   double taxPercent = 13;
   String externalScannerUrl = defaultExternalScannerUrl;
+  int externalTotalSources = 0;
   FinderReport? finderReport;
   Timer? _finderTimer;
   StreamSubscription<dynamic>? _networkSub;
@@ -609,9 +610,16 @@ class MarketController extends ChangeNotifier {
     final finderEnabledRaw = cfg['finder.enabled'];
     finderEnabled = finderEnabledRaw != 'false';
     externalScanMode = cfg['scan.mode'] == 'external';
-    externalScannerUrl = cfg['external.scanner.url']?.trim().isNotEmpty == true
-        ? cfg['external.scanner.url']!.trim()
-        : defaultExternalScannerUrl;
+    final savedExtUrl = cfg['external.scanner.url']?.trim() ?? '';
+    if (savedExtUrl.isEmpty || savedExtUrl.endsWith('/api/ironpin')) {
+      externalScannerUrl = defaultExternalScannerUrl;
+      if (savedExtUrl.endsWith('/api/ironpin')) {
+        await store.setSetting(
+            'external.scanner.url', defaultExternalScannerUrl);
+      }
+    } else {
+      externalScannerUrl = savedExtUrl;
+    }
     taxEnabled = cfg['tax.enabled'] == 'true';
     taxPercent = double.tryParse(cfg['tax.percent'] ?? '') ?? 13;
     if (taxPercent < 0 || taxPercent > 100) taxPercent = 13;
@@ -1364,7 +1372,7 @@ class MarketController extends ChangeNotifier {
     lastBackgroundScanCount =
         int.tryParse(await store.setting('lastBackgroundScanCount') ?? '') ?? 0;
     // A background run may have extended the lists or accepted a source.
-    if (!finder.running && !busy) {
+    if (!externalScanMode && !finder.running && !busy) {
       try {
         await finder.sync();
         await applyFinderAccepted();
@@ -1562,57 +1570,111 @@ class MarketController extends ChangeNotifier {
     _filterKey = '';
     _publishFailed = false;
     historyRevision++;
+    finished = 0;
+    externalTotalSources = 0;
     _notify();
     try {
-      // A pruned server feed must also leave the phone's archive: when the
-      // feed epoch changed, one full snapshot fetch (no `since`) runs with
-      // replaceMissing so retired local rows disappear from current offers.
-      final needsFullResync = await store.setting('external.resyncEpoch') !=
-          externalFeedResyncEpoch;
-      final saved = needsFullResync
-          ? null
-          : int.tryParse(await store.setting('external.cursor') ?? '');
-      final batch = await ExternalScanner.fetch(client.client,
-          url: externalScannerUrl, since: saved);
-      final replaceFullSnapshot = saved == null && batch.complete;
-      if (batch.quotes.isNotEmpty || replaceFullSnapshot) {
-        await store.saveSnapshot('qwen-scanner', batch.quotes,
-            replaceMissing: replaceFullSnapshot);
-        _indexStale = true;
-        endpointRevisions.update('qwen-scanner', (n) => n + 1,
-            ifAbsent: () => 1);
+      if (!_quotesLoaded) await reload();
+      final batch = await ExternalScanner.fetchSources(client.client,
+          url: externalScannerUrl);
+      final queue = batch.sources;
+      externalTotalSources = queue.length;
+      _notify();
+
+      if (queue.isEmpty) {
+        refreshBlockedReason = 'سرور هنوز منبع قابل‌خواندنی کشف نکرده است.';
+      } else {
+        var index = 0;
+        Future<void> worker() async {
+          while (index < queue.length && !disposed) {
+            final e = queue[index++];
+            try {
+              final fetched =
+                  await client.fetch(e, windowDays: discoveryDays);
+              final data = await readPhotos(fetched,
+                  defaultCurrency: e.defaultCurrency);
+              final found = data.isEmpty
+                  ? const SearcherResult([])
+                  : await Searcher.processAsync(data,
+                      now: DateTime.now(),
+                      windowDays: discoveryDays,
+                      resolver: MapsResolver(client.client));
+              if (found.quotes.isEmpty) {
+                await store.note(
+                    e.id,
+                    data.isEmpty
+                        ? 'متن پیام/ردیف قیمت در پاسخ عمومی پیدا نشد؛ داده قبلی حفظ شد.'
+                        : 'ردیف قابل‌ثبت نبود (بیرون از بازه: ${found.outOfWindow} • '
+                            'بی‌قیمت/بی‌محصول: ${found.noise})؛ داده قبلی حفظ شد.');
+              } else {
+                await store.saveSnapshot(e.id, found.quotes,
+                    replaceMissing: client.complete[e.id] ?? true);
+                _indexStale = true;
+                historyRevision++;
+                endpointRevisions.update(e.id, (n) => n + 1,
+                    ifAbsent: () => 1);
+                unawaited(_publishEndpoint(e.id).catchError((Object _) {}));
+              }
+            } catch (error, stack) {
+              AppLogger.instance.capture(error, stack, section: 'source');
+              await store.failure(
+                  e.id,
+                  error is FormatException
+                      ? error.message
+                      : 'خطا در اتصال/مهلت دریافت؛ داده قبلی حفظ شد.');
+            }
+            finished++;
+            _progress();
+            await Future<void>.delayed(const Duration(milliseconds: 450));
+          }
+        }
+
+        await Future.wait([worker(), worker()]);
       }
-      if (batch.complete && batch.cursor > 0) {
-        await store.setSetting('external.cursor', '${batch.cursor}');
-      }
-      if (batch.complete) {
-        await store.setSetting('external.resyncEpoch', externalFeedResyncEpoch);
-      }
-      finished = 1;
       await store.setSetting(
           'lastRefresh', DateTime.now().toUtc().toIso8601String());
       await AppLogger.instance.record('network', 'external_refresh_complete', {
-        'newOrUpdated': batch.quotes.length,
-        'complete': batch.complete,
-        'cursor': batch.cursor,
+        'serverSources': batch.totalFromServer,
+        'readableSources': queue.length,
+        'completed': finished,
       });
     } catch (error, stack) {
       AppLogger.instance.capture(error, stack, section: 'external_scanner');
       refreshBlockedReason = error is FormatException
           ? error.message
-          : 'دریافت از اسکنر سرور انجام نشد؛ داده ذخیره‌شده حفظ شد.';
+          : 'دریافت فهرست منابع از سرور انجام نشد؛ داده ذخیره‌شده حفظ شد.';
     } finally {
-      _refreshHeartbeat?.cancel();
-      _refreshHeartbeat = null;
       try {
-        await store.releaseRefreshLock(lease);
-      } catch (_) {}
-      lastRefreshAt =
-          DateTime.tryParse(await store.setting('lastRefresh') ?? '')
-              ?.toLocal();
-      busy = false;
-      await reload();
-      _notify();
+        if (_indexStale) {
+          rangeSession.invalidate();
+          _indexStale = false;
+        }
+        _progressTimer?.cancel();
+        _progressTimer = null;
+        _gather = false;
+        if (!(_publishHurry?.isCompleted ?? true)) _publishHurry!.complete();
+        await _publishTail;
+        if (_publishFlush != null) await _publishTail;
+        _gather = true;
+        if (_publishFailed || !_quotesLoaded) {
+          await reload();
+        } else {
+          states = await store.syncStates();
+          _notify();
+        }
+      } finally {
+        _refreshHeartbeat?.cancel();
+        _refreshHeartbeat = null;
+        try {
+          await store.releaseRefreshLock(lease);
+        } catch (_) {}
+        lastRefreshAt =
+            DateTime.tryParse(await store.setting('lastRefresh') ?? '')
+                ?.toLocal();
+        busy = false;
+        _notify();
+        unawaited(prepareCandidates());
+      }
     }
   }
 

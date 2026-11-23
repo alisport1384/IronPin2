@@ -171,8 +171,8 @@ class _InfoPageState extends State<InfoPage> {
     // سه گروه خواسته‌شده پشت یک منوی کشویی: منابع کشف‌شده، منابع داخلی و آدرس‌ها.
     List<Widget> discoveredSection() => [
           if (c.externalScanMode)
-            infoBox('جستجوی منابع در حالت خارجی غیرفعال است',
-                'در این حالت فقط فید قیمت سرور دریافت می‌شود و جستجوگرهای داخلی منبع یا پیشنهادهای کشف‌شده اجرا نمی‌شوند.')
+            infoBox('جستجوی محلی منابع در حالت خارجی غیرفعال است',
+                'در این حالت هوش جستجوگر ۲ روی گوشی خاموش است؛ فهرست منابع از سرور دریافت می‌شود و جستجوگر ۱ همراه با OCR روی گوشی فقط همان منابع را می‌خواند.')
           else
             _LazyExpansionTile(
                 title: const Text('هوش جستجوگر ۲ و فهرست منابع کشف‌شده'),
@@ -446,7 +446,7 @@ class _InfoPageState extends State<InfoPage> {
                           child: Text('داخلی — اسکنرهای روی گوشی')),
                       DropdownMenuItem(
                           value: 'external',
-                          child: Text('خارجی — فقط اسکنر سرور')),
+                          child: Text('خارجی — منابع کشف‌شده از سرور')),
                     ],
                     onChanged: c.busy || c.transferring
                         ? null
@@ -466,8 +466,8 @@ class _InfoPageState extends State<InfoPage> {
             if (c.externalScanMode)
               Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: infoBox('اسکنر سرور آیرون‌پین',
-                      'در این حالت جستجوگرهای داخلی غیرفعال‌اند. دریافت کامل تا پایان آماده‌سازی سرور انجام می‌شود؛ پس از آن فقط ردیف‌های تازه یا به‌روزشده دریافت می‌شوند. نشانی API: ${c.externalScannerUrl}')),
+                  child: infoBox('منابع سرور آیرون‌پین (جستجوگر ۲ آنلاین)',
+                      'هوش جستجوگر ۲ روی گوشی غیرفعال است. هنگام نوسازی، فهرست منابع تاییدشده از سرور دریافت می‌شود و جستجوگر ۱ به همراه OCR فقط روی همان منابع اجرا می‌گردد. نشانی API: ${c.externalScannerUrl}')),
             SwitchListTile(
                 title: const Text('اسکن دوره‌ای در پس‌زمینه'),
                 subtitle: const Text(
