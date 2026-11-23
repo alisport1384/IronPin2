@@ -20,6 +20,73 @@ class PublicTables {
   static final _statisticTitle =
       RegExp('میانه|میانگین|نمودار|روند|مقایسه|تاریخچه|پیش‌بینی|پیش بینی');
 
+  static String _cellText(Element cell) {
+    final sb = StringBuffer();
+    void walk(Node n) {
+      if (n is Text) {
+        final t = n.text;
+        if (t.trim().isEmpty) {
+          if (sb.isNotEmpty && !sb.toString().endsWith(' ')) sb.write(' ');
+          return;
+        }
+        sb.write(t);
+        return;
+      }
+      if (n is Element) {
+        if (n.localName == 'br') {
+          if (sb.isNotEmpty && !sb.toString().endsWith(' ')) sb.write(' ');
+          return;
+        }
+        final isSep = const {
+          'div',
+          'p',
+          'li',
+          'span',
+          'small',
+          'time',
+          'a',
+          'h1',
+          'h2',
+          'h3',
+          'h4',
+        }.contains(n.localName);
+        if (isSep && sb.isNotEmpty && !sb.toString().endsWith(' ')) {
+          sb.write(' ');
+        }
+        for (final c in n.nodes) {
+          walk(c);
+        }
+        if (isSep && sb.isNotEmpty && !sb.toString().endsWith(' ')) {
+          sb.write(' ');
+        }
+      }
+    }
+
+    walk(cell);
+    return latin(sb.toString());
+  }
+
+  static final _inlineDatePattern = RegExp(
+    r'(?:(?:آخرین\s*)?(?:به‌روزرسانی|به\s*روز\s*رسانی|بروزرسانی|تاریخ)\s*[:：]?\s*)?'
+    r'(?:(?:1[34]\d{2})[/.\-]\d{1,2}[/.\-]\d{1,2}(?:\s+(?:ساعت\s*)?\d{1,2}:\d{2})?|'
+    r'\d{1,2}\s+(?:فروردین|اردیبهشت|خرداد|تیر|مرداد|شهریور|مهر|آبان|آذر|دی|بهمن|اسفند)\s+(?:ماه\s+)?1[34]\d{2}|'
+    r'20\d{2}-\d{2}-\d{2}(?:T[^\s]+)?)',
+  );
+
+  static final _rowPieceKgPattern = RegExp(
+    r'وزن\s*[:：]?\s*(\d+(?:[.,٫]\d+)?)\s*(?:کیلوگرم|کیلو)(?!\s*(?:بر|در|/)\s*متر)',
+  );
+
+  static double? _explicitPieceKg(String title) {
+    for (final m in _rowPieceKgPattern.allMatches(title)) {
+      final prefix = title.substring(0, m.start).trimRight();
+      if (RegExp(r'(?:هر|در)\s*متر$').hasMatch(prefix)) continue;
+      final v = number(m[1]!);
+      if (v != null && v > 0) return v;
+    }
+    return null;
+  }
+
   /// The product a heading or a table caption names, without the words around
   /// it: «قیمت میلگرد ۸» → «میلگرد 8», «قیمت تیرآهن ۱۴ به تفکیک کارخانه» →
   /// «تیرآهن 14». Empty when the text names no product of the vocabulary or is
@@ -127,7 +194,7 @@ class PublicTables {
         final cells = row.children
             .where((e) => e.localName == 'th' || e.localName == 'td')
             .toList();
-        final text = cells.map((c) => latin(c.text)).toList();
+        final text = cells.map(_cellText).toList();
         if (text.any((s) => s.contains('قیمت')) &&
             ((inlinePriceUnits && text.any((s) => s.contains('محصول'))) ||
                 (text.any((s) => s.contains('واحد')) &&
@@ -219,13 +286,21 @@ class PublicTables {
         final priceHeader = headers.firstWhere(
             (h) => RegExp(r'^قیمت(?:\s|\(|$)').hasMatch(h),
             orElse: () => '');
-        final cur = TextPriceEngine.currency('$priceHeader $price');
+        final inlineDateMatch = _inlineDatePattern.firstMatch(price);
+        final inlineDateRaw = inlineDateMatch?[0] ?? '';
+        final inlineDate = inlineDateMatch == null
+            ? null
+            : TextPriceEngine.dateIn(inlineDateRaw);
+        final priceForMoney = inlineDate == null
+            ? price
+            : price.replaceFirst(inlineDateRaw, ' ').trim();
+        final cur = TextPriceEngine.currency('$priceHeader $priceForMoney');
         final prices = RegExp(
                 r'(?<![\d.])(?:\d{1,3}(?:[,٬.]\d{3})+(?:٫\d+)?|\d{1,3}(?: \d{3})+|\d+(?:[٫.]\d+)?)(?![\d.,٬])')
-            .allMatches(price)
+            .allMatches(priceForMoney)
             .toList();
-        final rawPrice = prices.length == 1 ? prices.single[0]! : price;
-        final amount = RegExp(r'استعلام|تماس|ناموجود').hasMatch(price) ||
+        final rawPrice = prices.length == 1 ? prices.single[0]! : priceForMoney;
+        final amount = RegExp(r'استعلام|تماس|ناموجود').hasMatch(priceForMoney) ||
                 prices.length != 1
             ? null
             : TextPriceEngine.money(rawPrice);
@@ -235,11 +310,17 @@ class PublicTables {
         final cellUnit = parseUnit(unitText);
         final headerUnit =
             headingOwned ? TextPriceEngine.priceUnit(priceHeader) : 'unknown';
+        final inlineCellUnit =
+            (inlinePriceUnits || headingOwned) &&
+                    cellUnit == 'unknown' &&
+                    headerUnit == 'unknown'
+                ? TextPriceEngine.priceUnit(priceForMoney)
+                : 'unknown';
         final unit = cellUnit != 'unknown'
             ? cellUnit
-            : inlinePriceUnits
-                ? TextPriceEngine.priceUnit(price)
-                : headerUnit;
+            : headerUnit != 'unknown'
+                ? headerUnit
+                : inlineCellUnit;
         final thicknessRaw = field('ضخامت');
         final thickness = number(thicknessRaw)?.toString() ?? spec.thickness;
         final width = field('عرض'), length = field('طول');
@@ -255,7 +336,8 @@ class PublicTables {
         final rowDate = field('تاریخ|بروزرسانی|به روز'),
             announced = rowDate.isNotEmpty
                 ? sourceDate(rowDate)
-                : (tableDate ?? precedingDate);
+                : (inlineDate ?? tableDate ?? precedingDate);
+        final pieceKg = _explicitPieceKg(title);
         final brand = field('برند|کارخانه|تولید کننده'),
             grade = field('گرید|استاندارد');
         final scope = table.querySelector('caption')?.text ?? '';
@@ -301,6 +383,7 @@ class PublicTables {
             lengthM: RegExp(r'\bm\b|متر').hasMatch(lengthHeader)
                 ? number(length)
                 : null,
+            pieceKg: pieceKg != null && pieceKg > 0 ? pieceKg : null,
             status: issues.isEmpty
                 ? 'جدول عمومی؛ موجودی نیازمند تأیید'
                 : issues.join('؛ '),
@@ -318,19 +401,23 @@ class PublicTables {
                   ? 'نامشخص'
                   : cellUnit != 'unknown'
                       ? 'سلول واحد جدول'
-                      : inlinePriceUnits
-                          ? 'عبارت صریح هر واحد در سلول قیمت'
-                          : 'واحد نوشته‌شده در سرستون قیمت',
+                      : headerUnit != 'unknown'
+                          ? 'واحد نوشته‌شده در سرستون قیمت'
+                          : 'عبارت صریح هر واحد در سلول قیمت',
               'مبنای تاریخ': announced == null
                   ? 'نامشخص'
                   : rowDate.isNotEmpty
                       ? 'تاریخ ردیف جدول'
-                      : tableDate != null
-                          ? 'تاریخ نوشته‌شده درون جدول'
-                          : 'تاریخ صریح پیش از جدول',
+                      : inlineDate != null
+                          ? 'تاریخ نوشته‌شده در سلول قیمت'
+                          : tableDate != null
+                              ? 'تاریخ نوشته‌شده درون جدول'
+                              : 'تاریخ صریح پیش از جدول',
               if (announced != null) 'دقت تاریخ نرخ': 'روز',
               if (titleBasis.isNotEmpty) 'مبنای نام کالا': titleBasis,
-              if (rowDate.isEmpty && tableDate != null)
+              if (rowDate.isEmpty && inlineDate != null)
+                'تاریخ متن منبع': inlineDateRaw
+              else if (rowDate.isEmpty && tableDate != null)
                 'تاریخ متن منبع': tableDateRaw
               else if (rawDate.isNotEmpty)
                 'تاریخ متن منبع': rowDate.isNotEmpty ? rowDate : rawDate,
