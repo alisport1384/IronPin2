@@ -7,6 +7,7 @@ import '../domain/calculator.dart';
 import '../domain/market.dart';
 import 'common.dart';
 import '../domain/money.dart';
+import 'product_converter_view.dart';
 
 class CalculatorPage extends StatefulWidget {
   final String city;
@@ -16,6 +17,7 @@ class CalculatorPage extends StatefulWidget {
 }
 
 class _CalculatorPageState extends State<CalculatorPage> {
+  bool converterMode = false;
   bool advanced = false;
   String shape = 'round', inputUnit = 'm', priceUnit = 'kg', metal = 'steel';
   final values = <String, TextEditingController>{};
@@ -157,7 +159,27 @@ class _CalculatorPageState extends State<CalculatorPage> {
         Text(
             'شهر سراسری: ${widget.city.isEmpty ? 'همه شهرها' : widget.city}؛ این حسابگر از ورودی دستی استفاده می‌کند، نه قیمت شهر دیگر.',
             style: const TextStyle(fontSize: 11, color: muted)),
-        const SizedBox(height: 22),
+        const SizedBox(height: 14),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment<bool>(
+              value: false,
+              icon: Icon(Icons.calculate_outlined, size: 18),
+              label: Text('وزن و هزینه'),
+            ),
+            ButtonSegment<bool>(
+              value: true,
+              icon: Icon(Icons.swap_horiz_rounded, size: 18),
+              label: Text('تبدیل واحد کالا'),
+            ),
+          ],
+          selected: {converterMode},
+          onSelectionChanged: (s) => setState(() => converterMode = s.first),
+        ),
+        const SizedBox(height: 16),
+        if (converterMode) ...[
+          const ProductConverterView(),
+        ] else ...[
         SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('حالت پیشرفته'),
@@ -399,6 +421,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
         ],
         infoBox('گرید و پوشش',
             'برای استیل، آلومینیوم و آلیاژ خاص، چگالی از دیتاشیت همان گرید وارد شود. وزن هندسی، جای گواهی سازنده، باسکول یا طراحی سازه را نمی‌گیرد.'),
+        ],
       ]);
 }
 

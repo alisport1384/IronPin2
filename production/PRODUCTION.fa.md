@@ -1,10 +1,10 @@
 # سند تولید IronPin — مرجع بازتولید برای عامل هوش مصنوعی
 
-> وضعیت جاری **۰.۹.۱۵+۳۷**: مرجع طراحی [DESIGN](../docs/DESIGN.fa.md)،
+> وضعیت جاری **۰.۹.۱۶+۳۸**: مرجع طراحی [DESIGN](../docs/DESIGN.fa.md)،
 > هوش جستجوگر [SEARCH_INTELLIGENCE](../docs/SEARCH_INTELLIGENCE.fa.md)،
-> گزارش [۰.۹.۱۵](../docs/TEST_REPORT.v0.9.15.fa.md) و تغییرات
-> [۰.۹.۱۵](CHANGES.v0.9.15.fa.md) (و نسخه‌های قبلی [۰.۹.۱۴](CHANGES.v0.9.14.fa.md)،
-> [۰.۹.۱۲](CHANGES.v0.9.12.fa.md)، [۰.۹.۹](CHANGES.v0.9.9.fa.md)).
+> گزارش [۰.۹.۱۶](../docs/TEST_REPORT.v0.9.16.fa.md) و تغییرات
+> [۰.۹.۱۶](CHANGES.v0.9.16.fa.md) (و نسخه‌های قبلی [۰.۹.۱۵](CHANGES.v0.9.15.fa.md)،
+> [۰.۹.۱۴](CHANGES.v0.9.14.fa.md)، [۰.۹.۱۲](CHANGES.v0.9.12.fa.md)، [۰.۹.۹](CHANGES.v0.9.9.fa.md)).
 > در حالت خارجی `۰.۹.۱۵`، هوش جستجوگر ۲ از سرور `qwenscanner` (`GET /api/sources`) تغذیه می‌شود و هوش جستجوگر ۱ + OCR روی گوشی منحصراً روی همان منابع اجرا می‌شوند.
 > کل آزمون‌های CI (`flutter analyze` و `flutter test --concurrency=1`) سبز، انتشار هم‌زمان هر دو معماری `armeabi-v7a` و `arm64-v8a` در
 > ریلیز `v0.9.15` از GitHub Actions با کلید ثابت پروژه، و آرشیو
