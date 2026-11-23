@@ -159,6 +159,48 @@ void main() {
       expect(pack.totalAreaM2, closeTo(28.8, 1e-9));
     });
 
+    test('cut_plate & unit_item support direct count (عدد) conversion', () {
+      final plate = ProductConverter.convert(
+        productId: 'cut_plate',
+        fields: {
+          'thicknessMm': 10,
+          'widthMm': 300,
+          'lengthMm': 300,
+          'piecesPerBundle': 10,
+        },
+        density: 7850,
+        inputUnit: 'piece',
+        inputValue: 100,
+      );
+      expect(plate.kgPerPiece, closeTo(7.065, 1e-9));
+      expect(plate.totalKg, closeTo(706.5, 1e-9));
+      expect(plate.totalAreaM2, closeTo(9.0, 1e-9));
+      expect(plate.totalBundles, closeTo(10.0, 1e-9));
+
+      final item = ProductConverter.convert(
+        productId: 'unit_item',
+        fields: {
+          'kgPerPiece': 2.5,
+          'piecesPerBundle': 10,
+        },
+        density: 7850,
+        inputUnit: 'ton',
+        inputValue: 1,
+      );
+      expect(item.totalPieces, closeTo(400, 1e-9));
+      expect(item.totalBundles, closeTo(40, 1e-9));
+      expect(
+        ProductConverter.unitLabel(
+            converterProducts.firstWhere((p) => p.id == 'unit_item'), 'piece'),
+        'عدد',
+      );
+      expect(
+        ProductConverter.unitLabel(
+            converterProducts.firstWhere((p) => p.id == 'rebar'), 'piece'),
+        'شاخه (عدد)',
+      );
+    });
+
     test('rejects invalid geometry and unsupported units', () {
       expect(
         () => ProductConverter.convert(

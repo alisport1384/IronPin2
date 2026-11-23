@@ -233,9 +233,10 @@ class _ProductConverterViewState extends State<ProductConverterView> {
                     value: '${fmt(res.totalAreaM2, decimals: 3)} مترمربع',
                   ),
                 _ResultLine(
-                  label: 'تعداد ${spec.pieceLabel}',
+                  label:
+                      'تعداد (${ProductConverter.unitLabel(spec, 'piece')})',
                   value:
-                      '${fmt(res.totalPieces, decimals: 2)} ${spec.pieceLabel} (خرید کامل: ${fmt(res.totalPieces.ceil())})',
+                      '${fmt(res.totalPieces, decimals: 2)} ${ProductConverter.unitLabel(spec, 'piece')} (خرید کامل: ${fmt(res.totalPieces.ceil())})',
                 ),
                 _ResultLine(
                   label: 'تعداد ${spec.bundleLabel}',
@@ -267,7 +268,7 @@ class _ProductConverterViewState extends State<ProductConverterView> {
                         style: const TextStyle(color: Colors.white70, fontSize: 11),
                       ),
                     Text(
-                      'هر ${spec.pieceLabel}: ${fmt(res.kgPerPiece, decimals: 3)} کیلو',
+                      'هر ${ProductConverter.unitLabel(spec, 'piece')}: ${fmt(res.kgPerPiece, decimals: 3)} کیلو',
                       style: const TextStyle(color: Colors.white70, fontSize: 11),
                     ),
                     Text(
@@ -342,7 +343,7 @@ class _ProductConverterViewState extends State<ProductConverterView> {
                         Text(
                             '• هر مترمربع: ${fmt(totalCost / res.totalAreaM2)} تومان'),
                       Text(
-                          '• هر ${spec.pieceLabel}: ${fmt(totalCost / res.totalPieces)} تومان'),
+                          '• هر ${ProductConverter.unitLabel(spec, 'piece')}: ${fmt(totalCost / res.totalPieces)} تومان'),
                       Text(
                           '• هر ${spec.bundleLabel}: ${fmt(totalCost / res.totalBundles)} تومان'),
                     ],

@@ -325,6 +325,38 @@ const converterProducts = <ConverterProductSpec>[
     ],
     note: 'تبدیل دقیق بر اساس وزن و مساحت واقعی اعلام‌شده برای هر برگ یا رول.',
   ),
+  ConverterProductSpec(
+    id: 'cut_plate',
+    title: 'صفحه ستون، پلیت و قطعه ورق (بر مبنای عدد)',
+    subtitle: 'ضخامت، عرض، طول قطعه، جنس و تعداد عدد در بسته',
+    pieceLabel: 'عدد',
+    bundleLabel: 'بسته / پالت',
+    hasMetres: false,
+    hasArea: true,
+    usesDensity: true,
+    fields: [
+      ConverterField('thicknessMm', 'ضخامت قطعه (میلی‌متر)', 10),
+      ConverterField('widthMm', 'عرض قطعه (میلی‌متر)', 300),
+      ConverterField('lengthMm', 'طول قطعه (میلی‌متر)', 300),
+      ConverterField('piecesPerBundle', 'تعداد عدد در هر بسته / پالت', 10),
+    ],
+    note: 'وزن هر عدد = طول × عرض × ضخامت × چگالی جنس؛ مناسب پلیت، بیس‌پلیت، لچکی و قطعات برش‌خورده با واحد عدد.',
+  ),
+  ConverterProductSpec(
+    id: 'unit_item',
+    title: 'قطعه تکی / اتصالات / بولت (با وزن هر عدد)',
+    subtitle: 'وزن هر یک عدد و تعداد در کارتن یا بسته',
+    pieceLabel: 'عدد',
+    bundleLabel: 'بسته / کارتن',
+    hasMetres: false,
+    hasArea: false,
+    usesDensity: false,
+    fields: [
+      ConverterField('kgPerPiece', 'وزن هر یک عدد (کیلوگرم)', 2.5),
+      ConverterField('piecesPerBundle', 'تعداد عدد در هر بسته / کارتن', 10),
+    ],
+    note: 'مناسب فلنج، زانویی، سه‌راهی، پیچ و مهره، بولت و هر کالایی که بر مبنای تعداد عدد و وزن واحد قیمت‌گذاری یا معامله می‌شود.',
+  ),
 ];
 
 class ProductConversionResult {
@@ -375,7 +407,7 @@ class ProductConverter {
         'm2' => 'مترمربع',
         'kg' => 'کیلوگرم',
         'ton' => 'تن',
-        'piece' => spec.pieceLabel,
+        'piece' => spec.pieceLabel == 'عدد' ? 'عدد' : '${spec.pieceLabel} (عدد)',
         'bundle' => spec.bundleLabel,
         _ => unit,
       };
@@ -571,7 +603,7 @@ class ProductConverter {
         totalBundles: totalBundles,
       );
     } else {
-      // Discrete surface/piece products (mesh, rabitz/turi)
+      // Discrete surface/piece products (mesh, cut_plate, unit_item, rabitz/turi)
       if (productId == 'mesh') {
         final pw = f('panelWidthM');
         final pl = f('panelLengthM');
@@ -584,6 +616,15 @@ class ProductConverter {
             (nx * pl * math.pi * dx * dx / 4.0 + ny * pw * math.pi * dy * dy / 4.0) *
                 density /
                 1e6;
+      } else if (productId == 'cut_plate') {
+        final t = f('thicknessMm');
+        final w = f('widthMm');
+        final l = f('lengthMm');
+        areaPerPiece = (w / 1000.0) * (l / 1000.0);
+        kgPerPiece = t * w * l * density / 1e9;
+      } else if (productId == 'unit_item') {
+        kgPerPiece = f('kgPerPiece');
+        areaPerPiece = 0;
       } else {
         kgPerPiece = f('kgPerPiece');
         areaPerPiece = f('areaPerPieceM2');
