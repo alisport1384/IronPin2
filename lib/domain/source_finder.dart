@@ -316,8 +316,12 @@ bool sellsGoods(String text) => tradeEvidence(text).okFor(text.length);
 /// every time the phone is online.
 class FinderPlan {
   static const perRound = 5;
+  // Every catalog family has a price topic: مقاطع فولادی، مفتول و مش،
+  // توری و رابیتس، شمش و قراضه، بولت/انکر و مواد اولیه فولاد.
   static const products = [
-    'میلگرد', 'تیرآهن', 'ورق', 'پروفیل', 'لوله', 'نبشی', 'ناودانی', 'آهن'
+    'میلگرد', 'تیرآهن', 'ورق', 'پروفیل', 'لوله', 'نبشی', 'ناودانی',
+    'سپری', 'تسمه', 'چهارپهلو', 'مفتول', 'مش جوشی', 'توری', 'رابیتس',
+    'شمش', 'قراضه', 'بولت', 'انکر بولت', 'آهن اسفنجی', 'گندله'
   ];
   static const cities = [
     'مشهد', 'تهران', 'اصفهان', 'تبریز', 'شیراز', 'اهواز', 'کرج', 'قم',

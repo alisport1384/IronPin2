@@ -514,6 +514,9 @@ void showQuoteDetails(BuildContext context, Quote q, VoidCallback onChart) {
                       'وزن شاخه اعلامی': q.pieceKg == null
                           ? 'نامشخص'
                           : '${fmt(q.pieceKg, decimals: 3)} کیلوگرم',
+                      'وزن هر متر اعلامی': q.kgm == null
+                          ? 'نامشخص'
+                          : '${fmt(q.kgm, decimals: 3)} کیلوگرم',
                       ...q.details
                     }.entries)
                       Padding(

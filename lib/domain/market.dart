@@ -294,7 +294,7 @@ class Quote {
       sourceUrl,
       sourceDateRaw,
       status;
-  final double? amount, pieceKg, lengthM, areaM2;
+  final double? amount, pieceKg, lengthM, areaM2, kgm;
   final DateTime fetchedAt;
   final Map<String, String> details;
   final String? size, thickness, dimensions, grade;
@@ -393,6 +393,7 @@ class Quote {
       this.pieceKg,
       this.lengthM,
       this.areaM2,
+      this.kgm,
       this.size,
       this.thickness,
       this.dimensions,
@@ -477,6 +478,7 @@ class Quote {
     }
 
     link('kg', 'ton', 1000);
+    if (_positive(kgm)) link('kg', 'm', kgm!);
     if (_positive(pieceKg)) link('kg', discreteUnit, pieceKg!);
     if (_positive(lengthM)) link('m', discreteUnit, lengthM!);
     if (_positive(areaM2)) link('m2', discreteUnit, areaM2!);
@@ -557,6 +559,7 @@ class Quote {
         'pieceKg': pieceKg,
         'lengthM': lengthM,
         'areaM2': areaM2,
+        'kgm': kgm,
         'fetchedAt': fetchedAt.toUtc().toIso8601String(),
         'size': sizeLabel,
         'thickness': thicknessLabel,
@@ -587,6 +590,7 @@ class Quote {
       pieceKg: (j['pieceKg'] as num?)?.toDouble(),
       lengthM: (j['lengthM'] as num?)?.toDouble(),
       areaM2: (j['areaM2'] as num?)?.toDouble(),
+      kgm: (j['kgm'] as num?)?.toDouble(),
       size: j['size'],
       thickness: j['thickness'],
       dimensions: j['dimensions'],

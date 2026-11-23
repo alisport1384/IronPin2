@@ -682,10 +682,13 @@ class _RangeCostState extends State<RangeCost> {
       fields['b']!.text = fmt(q.areaM2! / q.lengthM! * 1000, decimals: 6);
     }
     if (shape == 'catalog' &&
-        q.pieceKg != null &&
-        q.lengthM != null &&
-        q.lengthM! > 0) {
-      fields['kgm']!.text = fmt(q.pieceKg! / q.lengthM!, decimals: 6);
+        (q.kgm != null ||
+            (q.pieceKg != null &&
+                q.lengthM != null &&
+                q.lengthM! > 0))) {
+      fields['kgm']!.text = q.kgm != null
+          ? fmt(q.kgm!, decimals: 6)
+          : fmt(q.pieceKg! / q.lengthM!, decimals: 6);
     }
     if (['piece', 'anchorMeasured'].contains(shape) && q.pieceKg != null) {
       fields['kgpiece']!.text = fmt(q.pieceKg, decimals: 6);
