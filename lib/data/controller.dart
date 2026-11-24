@@ -907,13 +907,12 @@ class MarketController extends ChangeNotifier {
   List<Quote> get candidateRows {
     final c = candidates;
     // While a changed scope is being prepared, keep showing the previous set;
-    // when no candidate set exists yet on a large archive (>2000), wait for
-    // `prepareCandidates()` instead of cloning 16k+ Quote objects into `filtered`.
+    // when no candidate set exists yet on a loaded large archive (>2000), wait
+    // for `prepareCandidates()` instead of cloning 16k+ Quote objects into
+    // `filtered`. (In-memory tests that assign `quotes` directly without
+    // `init`/`reload` keep `_quotesLoaded == false`.)
     if (c == null) {
-      if (quotes.length > 2000) {
-        if (!busy && !disposed && _preparingCandidateKey.isEmpty) {
-          unawaited(prepareCandidates());
-        }
+      if (quotes.length > 2000 && _quotesLoaded) {
         return const <Quote>[];
       }
       return filtered;
@@ -988,7 +987,8 @@ class MarketController extends ChangeNotifier {
 
   /// The number of offers the scope really has, ready ones or not.
   int get candidateCount =>
-      candidates?.total ?? (quotes.length > 2000 ? 0 : filtered.length);
+      candidates?.total ??
+      ((quotes.length > 2000 && _quotesLoaded) ? 0 : filtered.length);
 
   String get _currentCandidateKey => [
         filter.basis,
