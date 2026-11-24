@@ -333,18 +333,23 @@ void main() {
     await t.pumpAndSettle();
 
     expect(find.text('عدد (برش‌خورده)'), findsOneWidget);
+    await t.ensureVisible(find.text('عدد (برش‌خورده)'));
+    await t.pumpAndSettle();
     await t.tap(find.text('عدد (برش‌خورده)'));
     await t.pumpAndSettle();
 
     expect(find.text('طول هر عدد برش‌خورده (میلی‌متر)'), findsOneWidget);
     expect(find.text('تعداد قطعات برش‌خورده (چند عدد؟)'), findsOneWidget);
 
+    await t.ensureVisible(
+        find.widgetWithText(TextField, 'تعداد قطعات برش‌خورده (چند عدد؟)'));
     await t.enterText(
         find.widgetWithText(TextField, 'تعداد قطعات برش‌خورده (چند عدد؟)'), '۱۰');
     await t.ensureVisible(find.text('محاسبه'));
     await t.tap(find.text('محاسبه'));
     await t.pumpAndSettle();
 
+    await t.ensureVisible(find.textContaining('تعداد برش‌خورده: ۱۰ عدد'));
     expect(find.textContaining('تعداد برش‌خورده: ۱۰ عدد'), findsOneWidget);
     expect(find.textContaining('تأمین از شاخه فابریک:'), findsOneWidget);
     expect(find.textContaining('پرت / باقیمانده برش:'), findsOneWidget);
