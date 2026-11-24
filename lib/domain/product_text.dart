@@ -312,6 +312,34 @@ class ProductQuery {
     }
   }
 
+  static List<String>? _cachedRawCities;
+  static int _cachedCitiesLen = -1;
+  static List<({String raw, String norm, RegExp re})> _cachedCityPatterns =
+      const [];
+
+  static List<({String raw, String norm, RegExp re})> _cityPatterns(
+      List<String> cities) {
+    if (identical(_cachedRawCities, cities) &&
+        _cachedCitiesLen == cities.length) {
+      return _cachedCityPatterns;
+    }
+    final ordered = [...cities]..sort((a, b) => b.length.compareTo(a.length));
+    final built = <({String raw, String norm, RegExp re})>[];
+    for (final candidate in ordered) {
+      final norm = ProductText.normalize(candidate).toLowerCase();
+      if (norm.isEmpty) continue;
+      built.add((
+        raw: candidate,
+        norm: norm,
+        re: RegExp('(?<![آ-ی])${RegExp.escape(norm)}(?![آ-ی])'),
+      ));
+    }
+    _cachedRawCities = cities;
+    _cachedCitiesLen = cities.length;
+    _cachedCityPatterns = built;
+    return built;
+  }
+
   factory ProductQuery.parse(String query, {List<String> cities = const []}) {
     if (ProductText.isNonMetal(query)) {
       return ProductQuery._(const ProductSpec(), '', const [], '',
@@ -320,27 +348,25 @@ class ProductQuery {
     var s = ProductText.normalize(query).toLowerCase();
     final spec = ProductText.spec(s);
     String city = '';
-    final ordered = [...cities]..sort((a, b) => b.length.compareTo(a.length));
-    for (final candidate in ordered) {
-      final re = RegExp(
-          '(?<![آ-ی])${RegExp.escape(ProductText.normalize(candidate))}(?![آ-ی])');
-      final m = re.firstMatch(s);
+    for (final entry in _cityPatterns(cities)) {
+      if (!s.contains(entry.norm)) continue;
+      final m = entry.re.firstMatch(s);
       if (m == null) continue;
       final prefix = s.substring(0, m.start);
       final explicit = RegExp(r'(?:در|شهر|دفتر|فروشنده)\s*$').hasMatch(prefix);
       final factory =
           RegExp(r'(?:فولاد|کارخانه|شکفته|پروفیل)\s*$').hasMatch(prefix);
       if (!explicit &&
-          ((spec.category.isNotEmpty && candidate != 'مشهد') || factory)) {
+          ((spec.category.isNotEmpty && entry.raw != 'مشهد') || factory)) {
         continue;
       }
-      city = candidate;
+      city = entry.raw;
       if (explicit) {
         final label =
             RegExp(r'(?:در|شهر|دفتر|فروشنده)\s*$').firstMatch(prefix)!;
         s = s.replaceRange(label.start, m.end, ' ');
       } else {
-        s = s.replaceAll(re, ' ');
+        s = s.replaceAll(entry.re, ' ');
       }
       break;
     }

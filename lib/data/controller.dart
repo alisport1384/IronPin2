@@ -893,6 +893,8 @@ class MarketController extends ChangeNotifier {
   /// True while the prepared list has rows that were not built yet.
   bool get moreCandidates => (candidates?.total ?? 0) > candidateRows.length;
 
+  bool get preparingCandidates => _preparingCandidateKey.isNotEmpty;
+
   /// Builds one more page and tells the tab to draw it.
   void showMoreCandidates() {
     final c = candidates;
@@ -904,10 +906,18 @@ class MarketController extends ChangeNotifier {
 
   List<Quote> get candidateRows {
     final c = candidates;
-    // While a changed scope is being prepared, the previous set stays on
-    // screen: falling back to `filtered` here would start a full in-memory
-    // filter over every decoded quote on each keystroke of a large archive.
-    if (c == null) return filtered;
+    // While a changed scope is being prepared, keep showing the previous set;
+    // when no candidate set exists yet on a large archive (>2000), wait for
+    // `prepareCandidates()` instead of cloning 16k+ Quote objects into `filtered`.
+    if (c == null) {
+      if (quotes.length > 2000) {
+        if (!busy && !disposed && _preparingCandidateKey.isEmpty) {
+          unawaited(prepareCandidates());
+        }
+        return const <Quote>[];
+      }
+      return filtered;
+    }
     final f = filter;
     final key = '$_candidateKey\u0001${c.total}\u0001${c.quotes.length}'
         '\u0001${f.sort}\u0001${f.mashhadFirst}';
@@ -977,7 +987,8 @@ class MarketController extends ChangeNotifier {
   }
 
   /// The number of offers the scope really has, ready ones or not.
-  int get candidateCount => candidates?.total ?? filtered.length;
+  int get candidateCount =>
+      candidates?.total ?? (quotes.length > 2000 ? 0 : filtered.length);
 
   String get _currentCandidateKey => [
         filter.basis,
@@ -1170,6 +1181,25 @@ class MarketController extends ChangeNotifier {
             cancelled: () => runSeq != _candidateRunSeq || disposed);
         if (disposed || busy) return;
         if (key != _currentCandidateKey) return;
+        final f = filter;
+        if (f.sort != 'latest' && set.wires.isNotEmpty) {
+          final sortedWires = await _sortCandidateWiresAsync(
+            set.wires,
+            basis: f.basis,
+            sort: f.sort,
+            mashhadFirst: f.mashhadFirst,
+            cancelled: () => runSeq != _candidateRunSeq || disposed || busy,
+          );
+          if (sortedWires == null ||
+              disposed ||
+              busy ||
+              key != _currentCandidateKey) {
+            return;
+          }
+          _rowCache = LazyQuoteList(sortedWires);
+          _rowCacheKey =
+              '$key\u0001${set.total}\u0001${set.quotes.length}\u0001${f.sort}\u0001${f.mashhadFirst}';
+        }
         candidates = set;
         _candidateKey = key;
         await AppLogger.instance
@@ -1212,6 +1242,76 @@ class MarketController extends ChangeNotifier {
     return _filtered;
   }
 
+  Future<List<Map<String, Object?>>?> _sortCandidateWiresAsync(
+    List<Map<String, Object?>> wires, {
+    required String basis,
+    required String sort,
+    required bool mashhadFirst,
+    required bool Function() cancelled,
+  }) async {
+    final n = wires.length;
+    if (n <= 2000) return _sortCandidateWires(wires);
+    final desc = sort == 'desc';
+    final groups = List<String>.filled(n, '');
+    final prices = List<double?>.filled(n, null);
+    var i = 0;
+    while (i < n) {
+      if (cancelled()) return null;
+      final sw = Stopwatch()..start();
+      final end = (i + 1000).clamp(0, n);
+      while (i < end) {
+        final chunkEnd = (i + 64).clamp(0, end);
+        for (; i < chunkEnd; i++) {
+          groups[i] = storedRowComparisonGroup(wires[i], basis);
+          prices[i] = storedRowTomanFor(wires[i], basis);
+        }
+        if (sw.elapsedMilliseconds >= 5) break;
+      }
+      if (i < n) await Future<void>.delayed(Duration.zero);
+    }
+    if (cancelled()) return null;
+
+    final buckets = <String, List<int>>{};
+    for (var j = 0; j < n; j++) {
+      (buckets[groups[j]] ??= []).add(j);
+    }
+    final groupKeys = buckets.keys.toList()..sort();
+    final out = <Map<String, Object?>>[];
+    final sw = Stopwatch()..start();
+    for (final gKey in groupKeys) {
+      if (cancelled()) return null;
+      final idx = buckets[gKey]!;
+      idx.sort((ia, ib) {
+        final a = wires[ia], b = wires[ib];
+        if (mashhadFirst) {
+          final p = (a['seller_city'] == 'مشهد' ? 0 : 1)
+              .compareTo(b['seller_city'] == 'مشهد' ? 0 : 1);
+          if (p != 0) return p;
+        }
+        final pa = prices[ia], pb = prices[ib];
+        if (pa == null && pb == null) {
+          return (a['title'] as String? ?? '')
+              .compareTo(b['title'] as String? ?? '');
+        }
+        if (pa == null) return 1;
+        if (pb == null) return -1;
+        final cmp = pa.compareTo(pb);
+        final dir = desc ? -cmp : cmp;
+        return dir != 0 ? dir : '${a['id']}'.compareTo('${b['id']}');
+      });
+      for (final j in idx) {
+        out.add(wires[j]);
+      }
+      if (sw.elapsedMilliseconds >= 5) {
+        await Future<void>.delayed(Duration.zero);
+        sw
+          ..reset()
+          ..start();
+      }
+    }
+    return out;
+  }
+
   Future<void> _updateFiltered() async {
     await Future<void>.delayed(Duration.zero);
     _notify();
@@ -1219,14 +1319,30 @@ class MarketController extends ChangeNotifier {
       while (!disposed) {
         final key = _currentFilterKey;
         final watch = Stopwatch()..start();
-        final result = await compute(_filterInBackground,
-            {'quotes': quotes, 'filter': filter, 'now': DateTime.now()});
+        final snapshot = quotes;
+        final List<Quote> result;
+        if (snapshot.length <= 2000) {
+          result = await compute(_filterInBackground,
+              {'quotes': snapshot, 'filter': filter, 'now': DateTime.now()});
+        } else {
+          final sliced = await _applyFilterSliced(
+            snapshot,
+            filter,
+            DateTime.now(),
+            cancelled: () => disposed || key != _currentFilterKey,
+          );
+          if (sliced == null) {
+            if (disposed) return;
+            continue;
+          }
+          result = sliced;
+        }
         if (disposed) return;
         if (key != _currentFilterKey) continue;
         _filtered = result;
         _filterKey = key;
         await AppLogger.instance.record('filter', 'completed', {
-          'rows': quotes.length,
+          'rows': snapshot.length,
           'matches': result.length,
           'elapsedMs': watch.elapsedMilliseconds
         });
@@ -1238,6 +1354,112 @@ class MarketController extends ChangeNotifier {
       filtering = false;
       _notify();
     }
+  }
+
+  static Future<List<Quote>?> _applyFilterSliced(
+    List<Quote> snapshot,
+    MarketFilter filter,
+    DateTime now, {
+    required bool Function() cancelled,
+  }) async {
+    final matched = <Quote>[];
+    var i = 0;
+    final n = snapshot.length;
+    while (i < n) {
+      if (cancelled()) return null;
+      final sw = Stopwatch()..start();
+      final end = (i + 1000).clamp(0, n);
+      while (i < end) {
+        final chunkEnd = (i + 64).clamp(0, end);
+        for (; i < chunkEnd; i++) {
+          final q = snapshot[i];
+          if (filter.matches(q, now)) matched.add(q);
+        }
+        if (sw.elapsedMilliseconds >= 5) break;
+      }
+      if (i < n) await Future<void>.delayed(Duration.zero);
+    }
+    if (cancelled()) return null;
+    if (matched.length <= 1) return matched;
+
+    final sort = filter.sort;
+    final mashhadFirst = filter.mashhadFirst;
+    final basis = filter.basis;
+    if (sort == 'latest') {
+      matched.sort((a, b) {
+        final da = a.marketAt, db = b.marketAt;
+        if (da == null && db != null) return 1;
+        if (db == null && da != null) return -1;
+        final byDate = da == null ? 0 : db!.compareTo(da);
+        if (byDate != 0) return byDate;
+        if (mashhadFirst) {
+          final city = (a.sellerCity == 'مشهد' ? 0 : 1)
+              .compareTo(b.sellerCity == 'مشهد' ? 0 : 1);
+          if (city != 0) return city;
+        }
+        return a.id.compareTo(b.id);
+      });
+      return matched;
+    }
+
+    final m = matched.length;
+    final groups = List<String>.filled(m, '');
+    final prices = List<double?>.filled(m, null);
+    var k = 0;
+    while (k < m) {
+      if (cancelled()) return null;
+      final sw = Stopwatch()..start();
+      final end = (k + 1000).clamp(0, m);
+      while (k < end) {
+        final chunkEnd = (k + 64).clamp(0, end);
+        for (; k < chunkEnd; k++) {
+          final q = matched[k];
+          groups[k] = q.comparisonGroup(basis);
+          prices[k] = q.tomanFor(basis);
+        }
+        if (sw.elapsedMilliseconds >= 5) break;
+      }
+      if (k < m) await Future<void>.delayed(Duration.zero);
+    }
+    if (cancelled()) return null;
+
+    final buckets = <String, List<int>>{};
+    for (var j = 0; j < m; j++) {
+      (buckets[groups[j]] ??= []).add(j);
+    }
+    final groupKeys = buckets.keys.toList()..sort();
+    final desc = sort == 'desc';
+    final out = <Quote>[];
+    final sw = Stopwatch()..start();
+    for (final gKey in groupKeys) {
+      if (cancelled()) return null;
+      final idx = buckets[gKey]!;
+      idx.sort((ia, ib) {
+        final a = matched[ia], b = matched[ib];
+        if (mashhadFirst) {
+          final p = (a.sellerCity == 'مشهد' ? 0 : 1)
+              .compareTo(b.sellerCity == 'مشهد' ? 0 : 1);
+          if (p != 0) return p;
+        }
+        final pa = prices[ia], pb = prices[ib];
+        if (pa == null && pb == null) return a.title.compareTo(b.title);
+        if (pa == null) return 1;
+        if (pb == null) return -1;
+        final c = pa.compareTo(pb);
+        final dir = desc ? -c : c;
+        return dir != 0 ? dir : a.id.compareTo(b.id);
+      });
+      for (final j in idx) {
+        out.add(matched[j]);
+      }
+      if (sw.elapsedMilliseconds >= 5) {
+        await Future<void>.delayed(Duration.zero);
+        sw
+          ..reset()
+          ..start();
+      }
+    }
+    return out;
   }
 
   bool _quotesLoaded = false;

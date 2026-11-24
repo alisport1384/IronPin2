@@ -87,7 +87,7 @@ class _PricesPageState extends State<PricesPage> {
       if (intent.city.isNotEmpty) 'دفتر ${intent.city}'
     ].join(' • ');
     return Column(children: [
-      if (c.filtering)
+      if (c.filtering || c.preparingCandidates)
         const RepaintBoundary(child: LinearProgressIndicator(minHeight: 2)),
       Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
@@ -185,7 +185,8 @@ class _PricesPageState extends State<PricesPage> {
                   children: [
                       const SizedBox(height: 45),
                       emptyState(
-                          c.candidates == null && c.filtering
+                          c.candidates == null &&
+                                  (c.filtering || c.preparingCandidates)
                               ? 'در حال آماده‌سازی پیشنهادها'
                               : c.quotes.isEmpty
                                   ? 'هنوز قیمتی دریافت نشده'

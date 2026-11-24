@@ -196,5 +196,57 @@ void main() {
       // not to grade the host. Overflow and rendering stay asserted above.
       expect(swFrame.elapsedMilliseconds, lessThan(2500));
     });
+
+    testWidgets(
+        'PricesPage handles rapid character-by-character name typing over 16,000+ rows without isolate OOM or crash',
+        (tester) async {
+      final now = DateTime.now().toUtc();
+      await tester.runAsync(() async {
+        for (var s = 3; s < 7; s++) {
+          await uiStore.saveSnapshot('ui-$s', [
+            for (var i = 0; i < 2125; i++)
+              _makeQuote('ui-$s', s * 2500 + i, now)
+          ]);
+        }
+        await uiStore.decideRetention(clearOld: false, now: now);
+        uiController.rangeSession.invalidate();
+        await uiController.reload();
+      });
+      expect(uiController.quotes.length, 16000);
+      uiController.filter.queryCities = const [
+        'تهران',
+        'مشهد',
+        'اصفهان',
+        'تبریز',
+        'شیراز',
+        'اهواز',
+        'کرج',
+        'نیشابور',
+      ];
+      // Simulate typing while `candidates == null` (pre-index) and verify no
+      // fallback to `filtered` (compute isolate copy of 16k Quotes) occurs.
+      uiController.candidates = null;
+      await tester.pumpWidget(IronPinApp(controller: uiController));
+      await tester.pump();
+      expect(uiController.filtering, isFalse);
+
+      final searchField = find.byType(TextField).first;
+      for (final partial in ['ذ', 'ذو', 'ذوب', 'ذوب آ', 'ذوب آهن']) {
+        await tester.enterText(searchField, partial);
+        await tester.pump(const Duration(milliseconds: 60));
+        expect(uiController.filtering, isFalse);
+        expect(tester.takeException(), isNull);
+      }
+
+      // Let 300ms debounce fire, then finish real SQLite/RangeSession preparation.
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.runAsync(() async {
+        await uiController.prepareCandidates();
+      });
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(tester.takeException(), isNull);
+      expect(uiController.candidateCount, 3200);
+      expect(find.byType(QuoteCard), findsWidgets);
+    });
   });
 }
