@@ -278,17 +278,14 @@ class PublicTables {
         final text = cells.map(_cellText).toList();
         if (_isValidHeaderRow(cells, text) &&
             text.any((s) => s.contains('قیمت')) &&
-            ((inlinePriceUnits &&
+            ((inlinePriceUnits && text.any((s) => s.contains('محصول'))) ||
+                (text.any((s) => s.contains('واحد')) &&
                     text.any((s) =>
-                        s.contains('محصول') && !s.contains('قیمت'))) ||
-                (text.any((s) => s.contains('واحد') && !s.contains('قیمت')) &&
-                    text.any((s) =>
-                        !s.contains('قیمت') &&
-                        (s.contains('ضخامت') ||
-                            s.contains('نام کالا') ||
-                            s.contains('محصول') ||
-                            s.contains('اسم')))) ||
-                (text.any((s) => s.contains('محصول') && !s.contains('قیمت')) &&
+                        s.contains('ضخامت') ||
+                        s.contains('نام کالا') ||
+                        s.contains('محصول') ||
+                        s.contains('اسم'))) ||
+                (text.any((s) => s.contains('محصول')) &&
                     text.any((s) =>
                         RegExp('تاریخ|بروزرسانی|به روز').hasMatch(s))))) {
           headers = text;
