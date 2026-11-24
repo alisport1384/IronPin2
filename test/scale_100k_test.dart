@@ -243,6 +243,15 @@ void main() {
         await uiController.prepareCandidates();
       });
       expect(uiController.candidateCount, 3200);
+      expect(uiController.candidateRows.length, 60);
+
+      // Verify async price sorting (`sort == 'asc'`) over all 3,200 matches.
+      await tester.runAsync(() async {
+        uiController.filter.sort = 'asc';
+        uiController.changed();
+        await uiController.prepareCandidates();
+      });
+      expect(uiController.candidateCount, 3200);
       expect(uiController.candidateRows.length, 3200);
 
       // 3. Render PricesPage and type character-by-character in the Search TextField.

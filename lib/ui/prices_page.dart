@@ -87,7 +87,7 @@ class _PricesPageState extends State<PricesPage> {
       if (intent.city.isNotEmpty) 'دفتر ${intent.city}'
     ].join(' • ');
     return Column(children: [
-      if (c.filtering || c.preparingCandidates)
+      if (c.filtering)
         const RepaintBoundary(child: LinearProgressIndicator(minHeight: 2)),
       Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
