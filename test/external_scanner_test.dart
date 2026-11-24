@@ -305,4 +305,165 @@ void main() {
       await store.close();
     }
   });
+
+  test(
+      'X-hour skip mode preserves source order, skips scanned sources within X hours, and restarts from first source after X hours',
+      () {
+    final now = DateTime.utc(2026, 11, 24, 12, 0);
+    final eps = [
+      for (var i = 1; i <= 4; i++)
+        SourceEndpoint(
+            's$i', 'منبع $i', 'https://s$i.example', 'عمومی', 'site-table', 'تهران'),
+    ];
+    final scannedAt = <String, DateTime>{
+      's1': now.subtract(const Duration(hours: 1)),
+      's2': now.subtract(const Duration(hours: 2)),
+    };
+
+    // Within X=4h window: s1 & s2 skipped; queue starts from s3, s4 in order.
+    final mid = MarketController.planRefreshQueue(
+      eps,
+      const {},
+      skipFresh: true,
+      freshWindow: const Duration(hours: 4),
+      scannedAt: scannedAt,
+      preserveSourceOrder: true,
+      now: now,
+    );
+    expect(mid.skippedFresh, 2);
+    expect(mid.queue.map((e) => e.id).toList(), ['s3', 's4']);
+
+    // After X=4h passes for all sources: restarts from the very first source s1.
+    final afterX = now.add(const Duration(hours: 3, minutes: 5));
+    final expired = MarketController.planRefreshQueue(
+      eps,
+      const {},
+      skipFresh: true,
+      freshWindow: const Duration(hours: 4),
+      scannedAt: scannedAt,
+      preserveSourceOrder: true,
+      now: afterX,
+    );
+    expect(expired.skippedFresh, 0);
+    expect(expired.queue.map((e) => e.id).toList(), ['s1', 's2', 's3', 's4']);
+  });
+
+  test(
+      'X-hour skip mode persists across app restart (close/reopen), skips scanned sources, and resets after X hours',
+      () async {
+    final store = await MarketStore.open(
+        dbPath: inMemoryDatabasePath, factory: databaseFactoryFfi);
+    final sample =
+        endpoints.where((e) => e.parser == 'telegram').take(4).toList();
+    final hits = <String, int>{};
+    var failRemaining = true;
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final validTg = '''
+      <html><body><div class="tgme_widget_message" data-post="ch/1">
+      <div class="tgme_widget_message_text">میلگرد 16 ذوب آهن 30000 تومان هر کیلو</div>
+      <a href="https://t.me/s/ch/1"><time datetime="$nowIso">11:30</time></a>
+      </div></body></html>''';
+    const emptyProse =
+        '<html><body><div class="tgme_widget_message" data-post="ch/1">'
+        '<div class="tgme_widget_message_text">با سلام، فروشگاه امروز تعطیل است</div>'
+        '</div></body></html>';
+
+    SourceEndpoint matchEp(Uri url) => sample.firstWhere(
+          (e) {
+            final handle = Uri.parse(e.url).pathSegments.last.toLowerCase();
+            return url.path.toLowerCase().contains(handle);
+          },
+          orElse: () => sample.first,
+        );
+
+    SourceClient makeClient() => SourceClient(
+          client: MockClient((req) async {
+            final ep = matchEp(req.url);
+            hits[ep.id] = (hits[ep.id] ?? 0) + 1;
+            if (failRemaining &&
+                (ep.id == sample[2].id || ep.id == sample[3].id)) {
+              return http.Response('timeout', 503);
+            }
+            // ep[0] yields rows, ep[1] yields note (scanned but empty), both count as scanned.
+            final body = ep.id == sample[1].id ? emptyProse : validTg;
+            return http.Response.bytes(utf8.encode(body), 200,
+                headers: {'content-type': 'text/html; charset=utf-8'});
+          }),
+        );
+
+    await store.setSettings({
+      'finder.enabled': 'false',
+      'enabled': jsonEncode([for (final e in sample) e.id]),
+      'allRegisteredSourcesEnabledVersion': '4',
+      'mashhadSourcesVersion': '072',
+      'sourcesVersion': '2',
+      'analysisSourcesVersion': '1',
+      'sheetSourcesVersion': '1',
+    });
+
+    final c1 = MarketController(store, client: makeClient());
+    try {
+      await c1.init();
+      await c1.setSkipScannedMode(true);
+      await c1.setSkipScannedHours(4);
+      // Session 1: ep[0] and ep[1] get scanned; ep[2] and ep[3] fail (simulating interrupted scan).
+      await c1.refresh();
+      expect(hits[sample[0].id], 1);
+      expect(hits[sample[1].id], 1);
+      expect(hits[sample[2].id], 1);
+      expect(hits[sample[3].id], 1);
+    } finally {
+      c1.dispose(); // Simulate closing the app
+    }
+
+    // Session 2: reopen app with a fresh MarketController on the same DB.
+    failRemaining = false;
+    final orderSeen = <String>[];
+    final c2 = MarketController(
+      store,
+      client: SourceClient(
+        client: MockClient((req) async {
+          final ep = matchEp(req.url);
+          orderSeen.add(ep.id);
+          hits[ep.id] = (hits[ep.id] ?? 0) + 1;
+          return http.Response.bytes(utf8.encode(validTg), 200,
+              headers: {'content-type': 'text/html; charset=utf-8'});
+        }),
+      ),
+    );
+    try {
+      await c2.init();
+      expect(c2.skipScannedMode, isTrue);
+      expect(c2.skipScannedHours, 4);
+
+      // Re-scan within 4 hours: ep[0] and ep[1] are skipped; only ep[2], ep[3] run!
+      await c2.refresh();
+      expect(c2.refreshSkipped, 2);
+      expect(orderSeen.toSet(), {sample[2].id, sample[3].id});
+      expect(hits[sample[0].id], 1);
+      expect(hits[sample[1].id], 1);
+
+      // Immediate re-scan: all 4 are within 4h -> all skipped instantly, 0 requests.
+      orderSeen.clear();
+      await c2.refresh();
+      expect(c2.refreshSkipped, 4);
+      expect(orderSeen, isEmpty);
+      expect(c2.refreshBlockedReason, contains('${c2.skipScannedHours} ساعت اخیر'));
+
+      // Simulate passing X=4 hours -> scan starts over from the very first source (sample[0])!
+      final past =
+          DateTime.now().toUtc().subtract(const Duration(hours: 4, minutes: 5));
+      for (final e in sample) {
+        c2.scannedAtMap[e.id] = past;
+      }
+      orderSeen.clear();
+      await c2.refresh();
+      expect(c2.refreshSkipped, 0);
+      expect(orderSeen.take(2).toSet(), {sample[0].id, sample[1].id});
+      expect(orderSeen.toSet(), {for (final e in sample) e.id});
+    } finally {
+      c2.dispose();
+      await store.close();
+    }
+  });
 }

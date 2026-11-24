@@ -34,6 +34,58 @@ class _InfoPageState extends State<InfoPage> {
 
   String query = '', platform = '';
   bool exporting = false;
+
+  Future<void> _pickCustomSkipHours(
+      BuildContext context, MarketController c) async {
+    final ctl = TextEditingController(text: '${c.skipScannedHours}');
+    String? err;
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, update) => AlertDialog(
+            title: const Text('تعیین بازه رد کردن (X ساعت)'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                    'عدد صحیح بین ۱ تا ۱۶۸ ساعت وارد کنید. منابعی که کمتر از X ساعت پیش اسکن شده باشند تا پایان این بازه رد می‌شوند.'),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: ctl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'تعداد ساعت (X)',
+                    errorText: err,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('لغو')),
+              FilledButton(
+                onPressed: () async {
+                  final parsed = number(ctl.text)?.round();
+                  if (parsed == null || parsed < 1 || parsed > 168) {
+                    update(() => err = 'عدد بین ۱ تا ۱۶۸ ساعت وارد کنید.');
+                    return;
+                  }
+                  await c.setSkipScannedHours(parsed);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) setState(() {});
+                },
+                child: const Text('ذخیره'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      ctl.dispose();
+    }
+  }
   Future<void> exportLogs() async {
     setState(() => exporting = true);
     try {
@@ -466,28 +518,106 @@ class _InfoPageState extends State<InfoPage> {
             if (c.externalScanMode)
               Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: infoBox('منابع سرور آیرون‌پین (جستجوگر ۲ آنلاین)',
+                      'هوش جستجوگر ۲ روی گوشی غیرفعال است. هنگام نوسازی، منابع جدید در اولویت اول دریافت می‌شوند و منابعی که در ${c.skipScannedMode ? '${fmt(c.skipScannedHours)} ساعت' : '۳۰ دقیقه'} اخیر اسکن شده‌اند به‌صورت خودکار رد می‌شوند. نشانی API: ${c.externalScannerUrl}')),
+            SwitchListTile(
+                title: const Text('مود رد کردن منابع اسکن‌شده تا X ساعت'),
+                subtitle: const Text(
+                    'منابعی که در X ساعت اخیر اسکن شده‌اند در نوسازی بعدی (حتی پس از بستن و باز کردن برنامه) رد می‌شوند و پس از X ساعت اسکن از منبع اول شروع می‌شود.'),
+                value: c.skipScannedMode,
+                onChanged: c.busy || c.transferring
+                    ? null
+                    : (value) async {
+                        await c.setSkipScannedMode(value);
+                        if (mounted) setState(() {});
+                      }),
+            if (c.skipScannedMode) ...[
+              Builder(builder: (ctx) {
+                final hourChoices = ({
+                  1,
+                  2,
+                  3,
+                  4,
+                  6,
+                  8,
+                  12,
+                  24,
+                  48,
+                  c.skipScannedHours,
+                }.toList()
+                  ..sort());
+                final activeIds = c.externalScanMode
+                    ? c.scannedAtMap.keys
+                    : c.enabled;
+                final freshCount = c.countFreshScanned(activeIds);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        infoBox('منابع سرور آیرون‌پین (جستجوگر ۲ آنلاین)',
-                            'هوش جستجوگر ۲ روی گوشی غیرفعال است. هنگام نوسازی، منابع جدید در اولویت اول دریافت می‌شوند و منابعی که در ۳۰ دقیقه اخیر با موفقیت به‌روزرسانی شده‌اند به‌صورت خودکار رد می‌شوند (برای اسکن کامل از ابتدا، دکمه نوسازی بالا را نگه دارید). نشانی API: ${c.externalScannerUrl}'),
-                        const SizedBox(height: 6),
-                        OutlinedButton.icon(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<int>(
+                              value: c.skipScannedHours,
+                              decoration: const InputDecoration(
+                                  labelText: 'بازه زمانی رد کردن (X ساعت)'),
+                              items: hourChoices
+                                  .map((h) => DropdownMenuItem(
+                                        value: h,
+                                        child: Text('${fmt(h)} ساعت'),
+                                      ))
+                                  .toList(),
+                              onChanged: c.busy || c.transferring
+                                  ? null
+                                  : (hours) async {
+                                      if (hours == null) return;
+                                      await c.setSkipScannedHours(hours);
+                                      if (mounted) setState(() {});
+                                    },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            tooltip: 'تعیین ساعت دلخواه (X)',
                             onPressed: c.busy || c.transferring
                                 ? null
-                                : () async {
-                                    await c.refresh(forceAll: true);
-                                    if (!context.mounted) return;
-                                    final reason = c.refreshBlockedReason;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                            content: Text(reason.isEmpty
-                                                ? 'نوسازی کامل همه منابع سرور انجام شد.'
-                                                : reason)));
-                                  },
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: const Text('نوسازی کامل از ابتدا (بدون رد کردن)')),
-                      ])),
+                                : () => _pickCustomSkipHours(ctx, c),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      infoBox(
+                        'وضعیت مود ${fmt(c.skipScannedHours)} ساعته',
+                        c.externalScanMode
+                            ? 'تا این لحظه ${fmt(freshCount)} منبع سرور در ${fmt(c.skipScannedHours)} ساعت اخیر اسکن شده‌اند؛ در نوسازی بعدی فقط منابع باقی‌مانده اسکن می‌شوند و پس از ${fmt(c.skipScannedHours)} ساعت اسکن از منبع اول شروع می‌شود.'
+                            : 'در حال حاضر ${fmt(freshCount)} از ${fmt(c.enabled.length)} منبع فعال در ${fmt(c.skipScannedHours)} ساعت اخیر اسکن شده‌اند (${fmt(c.enabled.length - freshCount)} منبع در صف ادامه). پس از گذشت ${fmt(c.skipScannedHours)} ساعت، اسکن دوباره از منبع اول شروع می‌شود.',
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+            if (c.skipScannedMode || c.externalScanMode)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+                child: OutlinedButton.icon(
+                  onPressed: c.busy || c.transferring
+                      ? null
+                      : () async {
+                          await c.refresh(forceAll: true);
+                          if (!context.mounted) return;
+                          final reason = c.refreshBlockedReason;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(reason.isEmpty
+                                  ? 'نوسازی کامل همه منابع از ابتدا انجام شد.'
+                                  : reason)));
+                        },
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('نوسازی کامل از ابتدا (بدون رد کردن)'),
+                ),
+              ),
             SwitchListTile(
                 title: const Text('اسکن دوره‌ای در پس‌زمینه'),
                 subtitle: const Text(

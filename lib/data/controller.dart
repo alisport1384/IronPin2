@@ -48,6 +48,10 @@ class MarketController extends ChangeNotifier {
   List<SourceEndpoint> finderSources = [];
   bool finderEnabled = true;
   bool externalScanMode = false;
+  bool skipScannedMode = false;
+  int skipScannedHours = 6;
+  Map<String, DateTime> scannedAtMap = {};
+  Future<void> _scannedPersistTail = Future<void>.value();
   bool taxEnabled = false;
   double taxPercent = 13;
   String externalScannerUrl = defaultExternalScannerUrl;
@@ -55,6 +59,8 @@ class MarketController extends ChangeNotifier {
   int refreshTotal = 0;
   int refreshSkipped = 0;
   static const Duration defaultFreshSkipWindow = Duration(minutes: 30);
+
+  Duration get skipScannedWindow => Duration(hours: skipScannedHours);
   FinderReport? finderReport;
   Timer? _finderTimer;
   StreamSubscription<dynamic>? _networkSub;
@@ -613,6 +619,10 @@ class MarketController extends ChangeNotifier {
     final finderEnabledRaw = cfg['finder.enabled'];
     finderEnabled = finderEnabledRaw != 'false';
     externalScanMode = cfg['scan.mode'] == 'external';
+    skipScannedMode = cfg['scan.skipMode'] == 'true';
+    final savedSkipHours = int.tryParse(cfg['scan.skipHours'] ?? '') ?? 6;
+    skipScannedHours = savedSkipHours.clamp(1, 168);
+    scannedAtMap = decodeScannedAtMap(cfg['scan.scannedAtMap']);
     final savedExtUrl = cfg['external.scanner.url']?.trim() ?? '';
     if (savedExtUrl.isEmpty || savedExtUrl.endsWith('/api/ironpin')) {
       externalScannerUrl = defaultExternalScannerUrl;
@@ -1757,14 +1767,96 @@ class MarketController extends ChangeNotifier {
     _notify();
   }
 
+  static Map<String, DateTime> decodeScannedAtMap(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      final out = <String, DateTime>{};
+      for (final e in decoded.entries) {
+        final dt = DateTime.tryParse('${e.value ?? ''}')?.toUtc();
+        if (dt != null) out['${e.key}'] = dt;
+      }
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> setSkipScannedMode(bool enabled) async {
+    skipScannedMode = enabled;
+    await store.setSetting('scan.skipMode', '$enabled');
+    _notify();
+  }
+
+  Future<void> setSkipScannedHours(int hours) async {
+    skipScannedHours = hours.clamp(1, 168);
+    await store.setSetting('scan.skipHours', '$skipScannedHours');
+    _notify();
+  }
+
+  Future<void> clearScannedHistory() async {
+    scannedAtMap = {};
+    _scannedPersistTail = _scannedPersistTail
+        .then((_) => store.setSetting('scan.scannedAtMap', '{}'))
+        .catchError((Object _) {});
+    await _scannedPersistTail;
+    _notify();
+  }
+
+  Future<void> _recordSourceScanned(String endpointId) async {
+    scannedAtMap[endpointId] = DateTime.now().toUtc();
+    final snapshot = jsonEncode({
+      for (final e in scannedAtMap.entries) e.key: e.value.toIso8601String(),
+    });
+    _scannedPersistTail = _scannedPersistTail
+        .then((_) => store.setSetting('scan.scannedAtMap', snapshot))
+        .catchError((Object _) {});
+    await _scannedPersistTail;
+  }
+
+  int countFreshScanned(Iterable<String> ids, {DateTime? now}) {
+    final nowUtc = (now ?? DateTime.now()).toUtc();
+    final window = skipScannedWindow;
+    var count = 0;
+    for (final id in ids) {
+      final scanned = scannedAtMap[id] ??
+          DateTime.tryParse('${states[id]?['success_at'] ?? ''}')?.toUtc();
+      if (scanned != null && nowUtc.difference(scanned) < window) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   static ({List<SourceEndpoint> queue, int skippedFresh}) planRefreshQueue(
     List<SourceEndpoint> raw,
     Map<String, Map<String, Object?>> sync, {
     required bool skipFresh,
     Duration freshWindow = defaultFreshSkipWindow,
+    Map<String, DateTime> scannedAt = const {},
+    bool preserveSourceOrder = false,
     DateTime? now,
   }) {
     final nowUtc = (now ?? DateTime.now()).toUtc();
+    if (preserveSourceOrder) {
+      final ordered = <SourceEndpoint>[];
+      var skippedFresh = 0;
+      for (final e in raw) {
+        final ok = DateTime.tryParse('${sync[e.id]?['success_at'] ?? ''}')
+            ?.toUtc();
+        final lastScan = scannedAt[e.id]?.toUtc() ?? ok;
+        if (skipFresh &&
+            lastScan != null &&
+            nowUtc.difference(lastScan) < freshWindow) {
+          skippedFresh++;
+          continue;
+        }
+        ordered.add(e);
+      }
+      return (queue: ordered, skippedFresh: skippedFresh);
+    }
+
     final unseen = <SourceEndpoint>[];
     final failedBefore = <({SourceEndpoint ep, DateTime? tried})>[];
     final stale = <({SourceEndpoint ep, DateTime ok})>[];
@@ -1775,11 +1867,14 @@ class MarketController extends ChangeNotifier {
       final ok = DateTime.tryParse('${row?['success_at'] ?? ''}')?.toUtc();
       final tried =
           DateTime.tryParse('${row?['attempted_at'] ?? ''}')?.toUtc();
+      final lastScan = scannedAt[e.id]?.toUtc() ?? ok;
+      if (skipFresh &&
+          lastScan != null &&
+          nowUtc.difference(lastScan) < freshWindow) {
+        skippedFresh++;
+        continue;
+      }
       if (ok != null) {
-        if (skipFresh && nowUtc.difference(ok) < freshWindow) {
-          skippedFresh++;
-          continue;
-        }
         stale.add((ep: e, ok: ok));
       } else if (tried == null) {
         unseen.add(e);
@@ -1854,6 +1949,10 @@ class MarketController extends ChangeNotifier {
         batch.sources,
         sync,
         skipFresh: !forceAll,
+        freshWindow:
+            skipScannedMode ? skipScannedWindow : defaultFreshSkipWindow,
+        scannedAt: scannedAtMap,
+        preserveSourceOrder: skipScannedMode,
       );
       final queue = plan.queue;
       refreshSkipped = plan.skippedFresh;
@@ -1864,8 +1963,9 @@ class MarketController extends ChangeNotifier {
       if (batch.sources.isEmpty) {
         refreshBlockedReason = 'سرور هنوز منبع قابل‌خواندنی کشف نکرده است.';
       } else if (queue.isEmpty && refreshSkipped > 0) {
-        refreshBlockedReason =
-            'همهٔ $refreshSkipped منبع در ۳۰ دقیقه اخیر به‌روزرسانی شده‌اند؛ برای نوسازی اجباری از ابتدا، دکمه نوسازی را نگه دارید.';
+        refreshBlockedReason = skipScannedMode
+            ? 'همهٔ $refreshSkipped منبع در $skipScannedHours ساعت اخیر اسکن شده‌اند؛ اسکن بعدی پس از پایان این بازه از منبع اول شروع می‌شود (برای اسکن فوری از ابتدا، دکمه نوسازی را نگه دارید).'
+            : 'همهٔ $refreshSkipped منبع در ۳۰ دقیقه اخیر به‌روزرسانی شده‌اند؛ برای نوسازی اجباری از ابتدا، دکمه نوسازی را نگه دارید.';
       } else {
         var index = 0;
         Future<void> worker() async {
@@ -1889,9 +1989,11 @@ class MarketController extends ChangeNotifier {
                         ? 'متن پیام/ردیف قیمت در پاسخ عمومی پیدا نشد؛ داده قبلی حفظ شد.'
                         : 'ردیف قابل‌ثبت نبود (بیرون از بازه: ${found.outOfWindow} • '
                             'بی‌قیمت/بی‌محصول: ${found.noise})؛ داده قبلی حفظ شد.');
+                await _recordSourceScanned(e.id);
               } else {
                 await store.saveSnapshot(e.id, found.quotes,
                     replaceMissing: client.complete[e.id] ?? true);
+                await _recordSourceScanned(e.id);
                 _indexStale = true;
                 historyRevision++;
                 endpointRevisions.update(e.id, (n) => n + 1,
@@ -2037,9 +2139,13 @@ class MarketController extends ChangeNotifier {
     final planned = planRefreshQueue(
       availableEndpoints.where((e) => enabled.contains(e.id)).toList(),
       sync,
-      skipFresh: false,
+      skipFresh: !forceAll && skipScannedMode,
+      freshWindow: skipScannedWindow,
+      scannedAt: scannedAtMap,
+      preserveSourceOrder: skipScannedMode,
     );
     final queue = planned.queue;
+    refreshSkipped = planned.skippedFresh;
     refreshTotal = queue.length;
     // The completed lists of هوش جستجوگر ۲ are handed over here, a few entries
     // per refresh: each is read by the same reader and judged by the same
@@ -2075,6 +2181,10 @@ class MarketController extends ChangeNotifier {
       }
     }
     refreshTotal = queue.length;
+    if (queue.isEmpty && refreshSkipped > 0) {
+      refreshBlockedReason =
+          'همهٔ $refreshSkipped منبع در $skipScannedHours ساعت اخیر اسکن شده‌اند؛ اسکن بعدی پس از پایان این بازه از منبع اول شروع می‌شود (برای اسکن فوری از ابتدا، دکمه نوسازی را نگه دارید).';
+    }
     _notify();
     Future<void> answer(SourceEndpoint e, int rows, String note) async {
       final key = handoff[e.id];
@@ -2133,12 +2243,14 @@ class MarketController extends ChangeNotifier {
                     ? 'متن پیام/ردیف قیمت در پاسخ عمومی پیدا نشد؛ داده قبلی حفظ شد.'
                     : 'ردیف قابل‌ثبت نبود (بیرون از بازه: ${found.outOfWindow} • '
                         'بی‌قیمت/بی‌محصول: ${found.noise})؛ داده قبلی حفظ شد.');
+            await _recordSourceScanned(e.id);
             finished++;
             _progress();
             continue;
           }
           await store.saveSnapshot(e.id, found.quotes,
               replaceMissing: client.complete[e.id] ?? true);
+          await _recordSourceScanned(e.id);
           // Fresh rows are derived at write time; drop the previous answers.
           // The index itself is rebuilt once, when the refresh finishes.
           _indexStale = true;

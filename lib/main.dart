@@ -303,7 +303,9 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                                 final summary = reason.isNotEmpty
                                     ? reason
                                     : c.refreshSkipped > 0
-                                        ? 'نوسازی انجام شد (${fmt(c.refreshTotal)} منبع بررسی شد • ${fmt(c.refreshSkipped)} منبع تازه رد شد).'
+                                        ? c.skipScannedMode
+                                            ? 'نوسازی انجام شد (${fmt(c.refreshTotal)} منبع بررسی شد • ${fmt(c.refreshSkipped)} منبع اسکن‌شده در ${fmt(c.skipScannedHours)} ساعت اخیر رد شد).'
+                                            : 'نوسازی انجام شد (${fmt(c.refreshTotal)} منبع بررسی شد • ${fmt(c.refreshSkipped)} منبع تازه رد شد).'
                                         : 'نوسازی انجام شد.';
                                 ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -333,9 +335,11 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                               child: Text(
                                   c.busy
                                       ? (c.externalScanMode
-                                          ? (c.externalTotalSources > 0
-                                              ? 'اسکن منابع سرور ${fmt(c.finished)} / ${fmt(c.externalTotalSources)}'
-                                              : 'دریافت فهرست منابع از سرور')
+                                          ? (c.refreshTotal > 0
+                                              ? 'اسکن منابع سرور ${fmt(c.finished)} / ${fmt(c.refreshTotal)}'
+                                              : c.externalTotalSources > 0
+                                                  ? 'اسکن منابع سرور ${fmt(c.finished)} / ${fmt(c.externalTotalSources)}'
+                                                  : 'دریافت فهرست منابع از سرور')
                                           : 'دریافت منابع ${fmt(c.finished)} / ${fmt(c.refreshTotal > 0 ? c.refreshTotal : c.enabled.length)}')
                                       : (c.externalScanMode
                                           ? '${fmt(c.quotes.length)} ردیف • منابع سرور'

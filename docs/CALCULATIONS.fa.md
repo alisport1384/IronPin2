@@ -113,3 +113,16 @@ estimated_total = base × (1 + tax_percent/100) + final_shipping + final_service
 ۴۱پیوند غیرتلگرام و۶۴مسیر انتخابی دربسته؛ فقط۱۴مسیر پیش‌فرض. اضافه‌شدن۲۴مسیر به معنی۲۴اتصال عددی موفق نیست. روبیکاهای نمونه فقط معرفی عمومی برگرداندند؛ واردکردن دستی متن، دریافت خودکار روبیکا نیست. دریافت واقعی/خطاهای شبکه و تعداد نامزد/قابل‌مقایسه در گزارش0.4جدا هستند. جزئیاتالگوها/ابهام‌ها/تاریخ/پوششصفحات: `docs/TEXT_ENGINE.fa.md`.
 
 وزن نظری ماشین‌حساب در فید استفاده نمی‌شود؛ تبدیل صرفاً با جرم/طول/مساحت معتبر همان پیشنهاد. schema۲بدون تغییر، تنظیم منابع وrawpayloadقدیمی خوانده می‌شوند. snapshotمحدود، مدخل‌های قبلیlatestرا غیرفعال نمی‌کند؛ تاریخچه قبلی بدون انتخاب کاربر پاک نمی‌شود.
+
+
+## تفکیک «عدد (قطعه برش‌خورده)» از «برگ (شیت)» و «شاخه» (`۰.۹.۲۱`)
+
+در تب محاسبات (هر دو بخش «وزن و هزینه» و «تبدیل واحد کالا»)، واحد `piece` منحصراً بیانگر کالای فابریک کامل (`برگ (شیت)` یا `شاخه` یا `کلاف`) است و واحد مستقل **`عدد` (`cut`)** برای `X` عدد قطعهٔ برش‌خورده با معیارهای مشخص تعریف شده است (`SteelCalculator.calculate` با `inputUnit == 'cut'` و `ProductConverter.convert` با `inputUnit == 'cut'`):
+
+- **برش ورق (`plate`)**: با ورودی عرض و طول برش به میلی‌متر (`cutWidthMm`, `cutLengthMm`)، جرم هر عدد برش‌خورده از رابطهٔ `thicknessMm × cutWidthMm × cutLengthMm × density / 1e9` (+ پوشش اعلامی در مترمربع) محاسبه می‌شود. تعداد برش قابل استحصال از هر شیت فابریک (`W_sheet × L_sheet`) با حداکثر چیدمان در دو جهت (افقی و چرخانده ۹۰ درجه) به‌دست می‌آید:
+  `cutsPerStock = max((W_sheet ~/ cutW) × (L_sheet ~/ cutL), (W_sheet ~/ cutL) × (L_sheet ~/ cutW))`.
+- **برش مقاطع شاخه‌ای (`rebar`, `rhs`, `pipe`, `flat`, `angle`, `channel`, `ibeam`, `tee`, `square`, `hex`, `catalog`, `wire`)**: با طول هر عدد برش‌خورده (`cutLengthM = cutLengthMm / 1000`) و طول شاخه فابریک (`L_stock`)، جرم هر عدد برابر `kgPerMetre × cutLengthM` و ظرفیت هر شاخه کامل برابر `L_stock ~/ cutLengthM` است.
+- **تخصیص شیت/شاخه کامل و پرت (`CutAllocationResult`)**:
+  `requiredStockPieces = ceil(X / cutsPerStock)`، `stockTotalKg = requiredStockPieces × stockPieceKg`، و `wasteKg = max(0, stockTotalKg - netTotalKg)` همراه با درصد پرت (`wasteKg / stockTotalKg × 100`) و متراژ/مترمربع باقیمانده گزارش می‌شود.
+- **تفکیک قیمت**: قیمت «هر عدد برش‌خورده» (`priceUnit == 'cut'`) بر `X` عدد ضرب می‌شود و قیمت «هر شیت / هر شاخه کامل» (`priceUnit == 'piece'`) در حالت برش به عدد، بر `requiredStockPieces` شیت/شاخهٔ کامل مورد نیاز اعمال می‌گردد.
+
