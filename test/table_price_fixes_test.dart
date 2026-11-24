@@ -40,7 +40,7 @@ void main() {
       endpoint: 'ext-1',
       seller: 'شهر آهن',
       city: 'تهران',
-      category: 'توری',
+      category: 'عمومی',
       fetchedAt: fetched,
       headingOwned: true,
     );

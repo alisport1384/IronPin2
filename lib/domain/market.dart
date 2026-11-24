@@ -425,16 +425,25 @@ class Quote {
   }
 
   static final _noiseTextAmount = RegExp(
-      r'محل\s*بارگیری\s*[:：]|واحد\s*فروش\s*[:：]|ضخامت\s*[:：]|سایز\s*چشمه|وزن\s*تقریبی');
+      r'محل\s*بارگیری\s*[:：]|واحد\s*فروش\s*[:：]|ضخامت\s*[:：]|سایز\s*چشمه(?:\s*توری)?\s*[:：]|وزن\s*تقریبی');
 
   bool get hasTextAmount => details.containsKey('مبلغ استخراج‌شده');
+
+  static double? _parseAmountToken(String token) {
+    final s = latin(token).replaceAll('٬', ',').trim();
+    // Support Persian/Iranian thousands dots like "1.850.000".
+    if (RegExp(r'^\d{1,3}(?:\.\d{3})+$').hasMatch(s)) {
+      return double.tryParse(s.replaceAll('.', ''));
+    }
+    return number(s);
+  }
 
   static bool isUsableTextAmount(String rawText) {
     final raw = latin(rawText).trim();
     if (raw.isEmpty || _noiseTextAmount.hasMatch(raw)) return false;
-    final nums = RegExp(r'\d[\d,.]*')
+    final nums = RegExp(r'\d[\d,.٬]*')
         .allMatches(raw)
-        .map((m) => number(m[0]!))
+        .map((m) => _parseAmountToken(m[0]!))
         .whereType<double>()
         .toList();
     if (nums.isEmpty) return false;

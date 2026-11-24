@@ -85,7 +85,7 @@ class PublicTables {
   }
 
   static final _rowSpecsNoise = RegExp(
-      r'محل\s*بارگیری\s*[:：]|واحد\s*فروش\s*[:：]|ضخامت\s*[:：]|سایز\s*چشمه|وزن\s*تقریبی\s*[:：]');
+      r'محل\s*بارگیری\s*[:：]|واحد\s*فروش\s*[:：]|ضخامت\s*[:：]|سایز\s*چشمه(?:\s*توری)?\s*[:：]|وزن\s*تقریبی\s*[:：]');
 
   static bool _isValidHeaderRow(List<Element> cells, List<String> text) {
     if (text.length < 2) return false;
@@ -441,11 +441,12 @@ class PublicTables {
           for (final m in prices) TextPriceEngine.money(m[0]!)
         ].whereType<double>().toList();
         final isTaxPair = _hasTaxRatio(priceNums);
-        final rawPrice = prices.length == 1
-            ? prices.single[0]!
-            : prices.length > 1
-                ? prices.map((m) => m[0]!).join(' ')
-                : priceForMoney;
+        final rawPrice = (prices.length == 1
+                ? prices.single[0]!
+                : prices.length > 1
+                    ? prices.map((m) => m[0]!).join(' ')
+                    : priceForMoney)
+            .replaceAll('٬', ',');
         final amount = RegExp(r'استعلام|تماس|ناموجود').hasMatch(priceForMoney) ||
                 prices.length != 1
             ? null
