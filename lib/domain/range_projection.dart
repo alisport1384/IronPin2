@@ -758,7 +758,8 @@ class CandidateSelector {
         packed, unit, scope.basis, currency, raw['amount'] as num?);
     final comparable = price != null && price.isFinite && price > 0;
     if (!comparable) {
-      final hasTextAmount = (raw['amount_raw'] as String? ?? '').isNotEmpty;
+      final hasTextAmount =
+          Quote.isUsableTextAmount(raw['amount_raw'] as String? ?? '');
       if (!scope.includeUnpriced && !hasTextAmount) {
         unpriced++;
         if (offerSlot != null) {

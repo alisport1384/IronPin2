@@ -20,7 +20,7 @@ class PublicTables {
   static final _statisticTitle =
       RegExp('میانه|میانگین|نمودار|روند|مقایسه|تاریخچه|پیش‌بینی|پیش بینی');
 
-  static String _cellText(Element cell) {
+  static String _cellText(Element cell, {bool skipDiffTags = false}) {
     final sb = StringBuffer();
     void walk(Node n) {
       if (n is Text) {
@@ -33,6 +33,15 @@ class PublicTables {
         return;
       }
       if (n is Element) {
+        if (skipDiffTags) {
+          final cls = (n.attributes['class'] ?? '').toLowerCase();
+          if (RegExp(r'\b(?:change|diff|delta|fluctuation|trend|percent|stat)\b')
+              .hasMatch(cls)) {
+            return;
+          }
+          final pure = latin(n.text).trim();
+          if (pure == 'ثابت' || pure == '-') return;
+        }
         if (n.localName == 'br') {
           if (sb.isNotEmpty && !sb.toString().endsWith(' ')) sb.write(' ');
           return;
@@ -63,7 +72,79 @@ class PublicTables {
     }
 
     walk(cell);
-    return latin(sb.toString());
+    // Separate adjacent Latin/Persian digits or glued thousands groups like "1,579,500۱٬۷۳۷٬۰۰۰".
+    var out = sb
+        .toString()
+        .replaceAllMapped(
+            RegExp(r'([0-9])([۰-۹٠-٩])|([۰-۹٠-٩])([0-9])'),
+            (m) => '${m[1] ?? m[3]} ${m[2] ?? m[4]}');
+    out = latin(out);
+    out = out.replaceAllMapped(
+        RegExp(r'(\d{1,3}(?:,\d{3})+)(?=\d)'), (m) => '${m[1]} ');
+    return out;
+  }
+
+  static final _rowSpecsNoise = RegExp(
+      r'محل\s*بارگیری\s*[:：]|واحد\s*فروش\s*[:：]|ضخامت\s*[:：]|سایز\s*چشمه|وزن\s*تقریبی\s*[:：]');
+
+  static bool _isValidHeaderRow(List<Element> cells, List<String> text) {
+    if (text.length < 2) return false;
+    if (text.any((s) => s.length > 55 || _rowSpecsNoise.hasMatch(s))) {
+      return false;
+    }
+    if (cells.any((c) => c
+        .querySelectorAll('a')
+        .any((a) => ProductText.category(a.text).isNotEmpty))) {
+      return false;
+    }
+    return true;
+  }
+
+  static ({String chosenText, String unit, String approxNote})?
+      _resolveApproxPrice(String priceForMoney, String columnUnit) {
+    if (!RegExp(r'[≈~]|معادل').hasMatch(priceForMoney)) return null;
+    final parts = priceForMoney
+        .split(RegExp(r'\s*(?:≈|~|معادل)\s*'))
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.length < 2) return null;
+    String? matched;
+    String matchedUnit = columnUnit;
+    if (columnUnit != 'unknown') {
+      for (final p in parts) {
+        if (TextPriceEngine.priceUnit(p) == columnUnit) {
+          matched = p;
+          break;
+        }
+      }
+    }
+    if (matched == null) {
+      for (final p in parts) {
+        final u = TextPriceEngine.priceUnit(p);
+        final hasMoney = RegExp(r'\d').hasMatch(p);
+        if (hasMoney && u != 'unknown') {
+          matched = p;
+          if (columnUnit == 'unknown') matchedUnit = u;
+          break;
+        }
+      }
+    }
+    matched ??= parts.first;
+    return (
+      chosenText: matched,
+      unit: matchedUnit,
+      approxNote: priceForMoney,
+    );
+  }
+
+  static bool _hasTaxRatio(List<double> values) {
+    if (values.length != 2) return false;
+    final lo = values[0] < values[1] ? values[0] : values[1];
+    final hi = values[0] < values[1] ? values[1] : values[0];
+    if (lo <= 0) return false;
+    final ratio = hi / lo;
+    return ratio >= 1.088 && ratio <= 1.106;
   }
 
   static final _inlineDatePattern = RegExp(
@@ -195,15 +276,19 @@ class PublicTables {
             .where((e) => e.localName == 'th' || e.localName == 'td')
             .toList();
         final text = cells.map(_cellText).toList();
-        if (text.any((s) => s.contains('قیمت')) &&
-            ((inlinePriceUnits && text.any((s) => s.contains('محصول'))) ||
-                (text.any((s) => s.contains('واحد')) &&
+        if (_isValidHeaderRow(cells, text) &&
+            text.any((s) => s.contains('قیمت')) &&
+            ((inlinePriceUnits &&
                     text.any((s) =>
-                        s.contains('ضخامت') ||
-                        s.contains('نام کالا') ||
-                        s.contains('محصول') ||
-                        s.contains('اسم'))) ||
-                (text.any((s) => s.contains('محصول')) &&
+                        s.contains('محصول') && !s.contains('قیمت'))) ||
+                (text.any((s) => s.contains('واحد') && !s.contains('قیمت')) &&
+                    text.any((s) =>
+                        !s.contains('قیمت') &&
+                        (s.contains('ضخامت') ||
+                            s.contains('نام کالا') ||
+                            s.contains('محصول') ||
+                            s.contains('اسم')))) ||
+                (text.any((s) => s.contains('محصول') && !s.contains('قیمت')) &&
                     text.any((s) =>
                         RegExp('تاریخ|بروزرسانی|به روز').hasMatch(s))))) {
           headers = text;
@@ -211,7 +296,7 @@ class PublicTables {
         }
         if (headingOwned &&
             headers == null &&
-            text.length >= 2 &&
+            _isValidHeaderRow(cells, text) &&
             (rowIndex == 0 ||
                 row.parent?.localName == 'thead' ||
                 cells.every((c) => c.localName == 'th')) &&
@@ -282,45 +367,90 @@ class PublicTables {
             !title.contains(sheetKind)) {
           title = title.replaceFirst('ورق', 'ورق $sheetKind');
         }
-        final price = field(r'^قیمت(?:\s|\(|$)');
-        final priceHeader = headers.firstWhere(
-            (h) => RegExp(r'^قیمت(?:\s|\(|$)').hasMatch(h),
-            orElse: () => '');
+        final priceIndex =
+            headers.indexWhere((h) => RegExp(r'^قیمت(?:\s|\(|$)').hasMatch(h));
+        final price = priceIndex < 0
+            ? ''
+            : _cellText(cells[priceIndex], skipDiffTags: true);
+        final priceHeader = priceIndex < 0 ? '' : headers[priceIndex];
         final inlineDateMatch = _inlineDatePattern.firstMatch(price);
         final inlineDateRaw = inlineDateMatch?[0] ?? '';
         final inlineDate = inlineDateMatch == null
             ? null
             : TextPriceEngine.dateIn(inlineDateRaw);
-        final priceForMoney = inlineDate == null
+        var priceForMoney = inlineDate == null
             ? price
             : price.replaceFirst(inlineDateRaw, ' ').trim();
         final cur = TextPriceEngine.currency('$priceHeader $priceForMoney');
-        final prices = RegExp(
-                r'(?<![\d.])(?:\d{1,3}(?:[,٬.]\d{3})+(?:٫\d+)?|\d{1,3}(?: \d{3})+|\d+(?:[٫.]\d+)?)(?![\d.,٬])')
-            .allMatches(priceForMoney)
-            .toList();
-        final rawPrice = prices.length == 1 ? prices.single[0]! : priceForMoney;
-        final amount = RegExp(r'استعلام|تماس|ناموجود').hasMatch(priceForMoney) ||
-                prices.length != 1
-            ? null
-            : TextPriceEngine.money(rawPrice);
-        final valid = amount != null && amount.isFinite && amount > 0;
         final spec = ProductText.spec(title, categoryHint: rowCategory);
         final unitText = field(r'^واحد(?:\s|$)');
         final cellUnit = parseUnit(unitText);
         final headerUnit =
             headingOwned ? TextPriceEngine.priceUnit(priceHeader) : 'unknown';
+        final baseUnit = cellUnit != 'unknown' ? cellUnit : headerUnit;
+        final approx = _resolveApproxPrice(priceForMoney, baseUnit);
+        if (approx != null) {
+          priceForMoney = approx.chosenText;
+        }
         final inlineCellUnit =
             (inlinePriceUnits || headingOwned) &&
                     cellUnit == 'unknown' &&
                     headerUnit == 'unknown'
                 ? TextPriceEngine.priceUnit(priceForMoney)
                 : 'unknown';
-        final unit = cellUnit != 'unknown'
-            ? cellUnit
-            : headerUnit != 'unknown'
-                ? headerUnit
-                : inlineCellUnit;
+        final unit = approx != null && approx.unit != 'unknown'
+            ? approx.unit
+            : cellUnit != 'unknown'
+                ? cellUnit
+                : headerUnit != 'unknown'
+                    ? headerUnit
+                    : inlineCellUnit;
+        final isNoisePriceText = _rowSpecsNoise.hasMatch(priceForMoney) ||
+            (priceForMoney.length > 55 &&
+                !RegExp(r'تومان|ریال|≈').hasMatch(priceForMoney));
+        final numberPattern = RegExp(
+            r'(?<![\d.])(?:\d{1,3}(?:[,٬.]\d{3})+(?:٫\d+)?|\d{1,3}(?: \d{3})+|\d+(?:[٫.]\d+)?)(?![\d.,٬])');
+        var prices = isNoisePriceText
+            ? <RegExpMatch>[]
+            : numberPattern.allMatches(priceForMoney).toList();
+        if (prices.length >= 2 &&
+            !RegExp(r'تومان|ریال').hasMatch(priceForMoney) &&
+            prices.every((m) {
+              final n = TextPriceEngine.money(m[0]!);
+              return n != null && n < 100 && !m[0]!.contains(',');
+            })) {
+          prices = <RegExpMatch>[];
+        }
+        // Drop a trailing small change/fluctuation number (e.g. 880,000 alongside
+        // 33,000,000 & 36,300,000) when two prices form a VAT pair.
+        if (prices.length == 3) {
+          final nums = [
+            for (final m in prices) TextPriceEngine.money(m[0]!) ?? 0
+          ];
+          final sortedIdx = [0, 1, 2]..sort((a, b) => nums[a].compareTo(nums[b]));
+          final small = nums[sortedIdx[0]];
+          final mid = nums[sortedIdx[1]];
+          final big = nums[sortedIdx[2]];
+          if (small > 0 &&
+              small < mid * 0.25 &&
+              _hasTaxRatio([mid, big])) {
+            prices = [prices[sortedIdx[1]], prices[sortedIdx[2]]];
+          }
+        }
+        final priceNums = [
+          for (final m in prices) TextPriceEngine.money(m[0]!)
+        ].whereType<double>().toList();
+        final isTaxPair = _hasTaxRatio(priceNums);
+        final rawPrice = prices.length == 1
+            ? prices.single[0]!
+            : prices.length > 1
+                ? prices.map((m) => m[0]!).join(' ')
+                : priceForMoney;
+        final amount = RegExp(r'استعلام|تماس|ناموجود').hasMatch(priceForMoney) ||
+                prices.length != 1
+            ? null
+            : TextPriceEngine.money(rawPrice);
+        final valid = amount != null && amount.isFinite && amount > 0;
         final thicknessRaw = field('ضخامت');
         final thickness = number(thicknessRaw)?.toString() ?? spec.thickness;
         final width = field('عرض'), length = field('طول');
@@ -392,6 +522,8 @@ class PublicTables {
                 if (headers[i].isNotEmpty) headers[i]: text[i],
               if (valid || prices.length > 1) 'مبلغ استخراج‌شده': rawPrice,
               if (prices.length > 1) 'مبلغ چندگانه': 'بله',
+              if (isTaxPair) 'تفکیک منبع': 'با و بدون ارزش افزوده',
+              if (approx != null) 'معادل تبدیل منبع': approx.approxNote,
               if (rowDate.isNotEmpty && announced == null)
                 'تاریخ نامعتبر': 'بله',
               'مبنای ارز': cur == 'نامشخص'

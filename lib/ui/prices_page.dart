@@ -262,6 +262,12 @@ double? _visibleRawAmount(Quote q) {
 String _offerAmount(Quote q, String basis) {
   final value = q.priceFor(basis) ?? _visibleRawAmount(q);
   if (value == null) {
+    if (!q.hasUsableTextAmount) return 'نامشخص';
+    if (q.details['مبلغ چندگانه'] == 'بله' &&
+        !(q.details['مبلغ استخراج‌شده'] ?? '').contains(' تا ')) {
+      final isTax = q.details['تفکیک منبع'] == 'با و بدون ارزش افزوده';
+      return isTax ? 'چند مبلغی (با/بی‌مالیات)' : 'چند مبلغی (نیازمند بررسی)';
+    }
     return faDigits(q.details['مبلغ استخراج‌شده'] ?? 'نیازمند بررسی');
   }
   final converted = toman(value, q.currency);
@@ -271,9 +277,12 @@ String _offerAmount(Quote q, String basis) {
 }
 
 String _offerUnit(Quote q, String basis) {
+  if (q.priceFor(basis) == null && _visibleRawAmount(q) == null) {
+    if (!q.hasUsableTextAmount) return 'بدون قیمت معتبر';
+  }
   final currency =
       toman(_visibleRawAmount(q), q.currency) == null ? q.currency : 'تومان';
-  return q.priceFor(basis) == null && q.hasTextAmount
+  return q.priceFor(basis) == null && q.hasUsableTextAmount
       ? '$currency • واحد: ${q.unitName(q.unit)}'
       : '$currency / ${q.unitName(basis == 'original' ? q.unit : basis)}';
 }
@@ -358,7 +367,7 @@ class _QuoteCardState extends State<QuoteCard> {
                       if (q.specificationLabel.isNotEmpty)
                         tag(q.specificationLabel),
                       tag(q.tax),
-                      if (q.hasTextAmount && q.priceFor('original') == null)
+                      if (q.hasUsableTextAmount && q.priceFor('original') == null)
                         tag('مبلغ استخراج‌شده؛ مبنای ناقص'),
                       if (q.details['ورودی دستی'] == 'بله')
                         tag('ورودی دستی نسخه قبل')

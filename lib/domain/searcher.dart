@@ -666,7 +666,7 @@ class Searcher {
     // the amount is the source's own text (`hasTextAmount`), it is displayed as
     // announced, and the missing currency is recorded as a caveat. What is *not*
     // kept is a sentence with no product in it.
-    final announced = q.hasTextAmount;
+    final announced = q.hasUsableTextAmount;
     final manual = q.details['ورودی دستی'] == 'بله';
     if (!hasProduct) return manual && keepManualFallback;
     if (manual && keepManualFallback) return true;

@@ -424,7 +424,28 @@ class Quote {
         !date.isBefore(now.toUtc().subtract(const Duration(days: 7)));
   }
 
+  static final _noiseTextAmount = RegExp(
+      r'محل\s*بارگیری\s*[:：]|واحد\s*فروش\s*[:：]|ضخامت\s*[:：]|سایز\s*چشمه|وزن\s*تقریبی');
+
   bool get hasTextAmount => details.containsKey('مبلغ استخراج‌شده');
+
+  static bool isUsableTextAmount(String rawText) {
+    final raw = latin(rawText).trim();
+    if (raw.isEmpty || _noiseTextAmount.hasMatch(raw)) return false;
+    final nums = RegExp(r'\d[\d,.]*')
+        .allMatches(raw)
+        .map((m) => number(m[0]!))
+        .whereType<double>()
+        .toList();
+    if (nums.isEmpty) return false;
+    if (nums.every((n) => n < 100) && !RegExp(r'تومان|ریال').hasMatch(raw)) {
+      return false;
+    }
+    return true;
+  }
+
+  bool get hasUsableTextAmount =>
+      isUsableTextAmount(details['مبلغ استخراج‌شده'] ?? '');
   bool isFresh(DateTime now) =>
       announcedAt != null &&
       now.toUtc().difference(announcedAt!).inHours <= 30 &&
@@ -673,7 +694,7 @@ class MarketFilter {
         insideWindow(q, now, windowDays) &&
         (includeUnpriced ||
             price != null ||
-            q.hasTextAmount) &&
+            q.hasUsableTextAmount) &&
         (minPrice == null || (price != null && price >= minPrice!)) &&
         (maxPrice == null || (price != null && price <= maxPrice!));
   }
