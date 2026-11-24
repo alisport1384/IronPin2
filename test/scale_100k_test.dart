@@ -211,6 +211,7 @@ void main() {
         await uiStore.decideRetention(clearOld: false, now: now);
         uiController.rangeSession.invalidate();
         await uiController.reload();
+        await uiController.prepareCandidates();
       });
       expect(uiController.quotes.length, 16000);
       uiController.filter.queryCities = const [
@@ -223,29 +224,37 @@ void main() {
         'کرج',
         'نیشابور',
       ];
-      // Simulate typing while `candidates == null` (pre-index) and verify no
-      // fallback to `filtered` (compute isolate copy of 16k Quotes) occurs.
-      uiController.candidates = null;
+
+      // 1 & 2. Verify pre-index (`candidates == null`) on >2000 rows never falls
+      // back to `filtered` / `compute(_filterInBackground, ...)` and drive real
+      // keystroke-by-keystroke typing + rapid `changed()` cancellations outside
+      // FakeAsync so SQLite/RangeSession runs normally without zone deadlock.
+      await tester.runAsync(() async {
+        uiController.candidates = null;
+        expect(uiController.candidateRows, isEmpty);
+        expect(uiController.candidateCount, 0);
+        expect(uiController.filtering, isFalse);
+        for (final partial in ['ذ', 'ذو', 'ذوب', 'ذوب آ', 'ذوب آهن']) {
+          uiController.filter.query = partial;
+          uiController.changed();
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          expect(uiController.filtering, isFalse);
+        }
+        await uiController.prepareCandidates();
+      });
+      expect(uiController.candidateCount, 3200);
+      expect(uiController.candidateRows.length, 3200);
+
+      // 3. Render PricesPage and type character-by-character in the Search TextField.
       await tester.pumpWidget(IronPinApp(controller: uiController));
       await tester.pump();
-      expect(uiController.filtering, isFalse);
-
       final searchField = find.byType(TextField).first;
       for (final partial in ['ذ', 'ذو', 'ذوب', 'ذوب آ', 'ذوب آهن']) {
         await tester.enterText(searchField, partial);
-        await tester.pump(const Duration(milliseconds: 60));
+        await tester.pump(const Duration(milliseconds: 40));
         expect(uiController.filtering, isFalse);
         expect(tester.takeException(), isNull);
       }
-
-      // Let 300ms debounce fire, then finish real SQLite/RangeSession preparation.
-      await tester.pump(const Duration(milliseconds: 350));
-      await tester.runAsync(() async {
-        await uiController.prepareCandidates();
-      });
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(tester.takeException(), isNull);
-      expect(uiController.candidateCount, 3200);
       expect(find.byType(QuoteCard), findsWidgets);
     });
   });
