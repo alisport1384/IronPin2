@@ -19,11 +19,14 @@ class CalculatorPage extends StatefulWidget {
 class _CalculatorPageState extends State<CalculatorPage> {
   bool converterMode = false;
   bool advanced = false;
+  bool cutByCount = false;
   String shape = 'round', inputUnit = 'm', priceUnit = 'kg', metal = 'steel';
   final values = <String, TextEditingController>{};
   final density = TextEditingController(text: '۷۸۵۰'),
       quantity = TextEditingController(text: '۱'),
       length = TextEditingController(text: '۱۲'),
+      cutWidth = TextEditingController(text: '۳۰۰'),
+      cutLength = TextEditingController(text: '۱۵۰۰'),
       price = TextEditingController(),
       tax = TextEditingController(text: '۰'),
       shipping = TextEditingController(text: '۰'),
@@ -49,6 +52,13 @@ class _CalculatorPageState extends State<CalculatorPage> {
     }
     if (!advanced && shape == 'plate') values['b']!.text = '۱';
     if (!advanced && shape == 'catalog') values['kgm']!.clear();
+    cutLength.text = shape == 'plate' ? '۴۰۰' : '۱۵۰۰';
+    cutWidth.text = '۳۰۰';
+    if (!SteelCalculator.cuttableShapes.contains(shape)) {
+      cutByCount = false;
+      if (inputUnit == 'cut') inputUnit = 'piece';
+      if (priceUnit == 'cut') priceUnit = 'kg';
+    }
     result = null;
     total = null;
     error = null;
@@ -61,6 +71,8 @@ class _CalculatorPageState extends State<CalculatorPage> {
       density,
       quantity,
       length,
+      cutWidth,
+      cutLength,
       price,
       tax,
       shipping,
@@ -84,6 +96,12 @@ class _CalculatorPageState extends State<CalculatorPage> {
 
   void calculate() {
     try {
+      final isCutMode =
+          SteelCalculator.cuttableShapes.contains(shape) &&
+              (advanced ? inputUnit == 'cut' : cutByCount);
+      final effectiveInputUnit = advanced
+          ? inputUnit
+          : (isCutMode ? 'cut' : 'piece');
       final r = SteelCalculator.calculate(
           shape: shape,
           values: values.map((k, v) => MapEntry(
@@ -94,10 +112,12 @@ class _CalculatorPageState extends State<CalculatorPage> {
                       ? read(v) / read(length)
                       : read(v))),
           density: advanced ? read(density) : 7850,
-          inputUnit: advanced ? inputUnit : 'piece',
+          inputUnit: effectiveInputUnit,
           quantity: read(quantity),
           lengthPerPiece: shape == 'anchorMeasured' ? 1 : read(length),
-          wastePercent: advanced ? read(waste) : 0);
+          wastePercent: advanced ? read(waste) : 0,
+          cutLengthMm: isCutMode ? read(cutLength) : null,
+          cutWidthMm: isCutMode && shape == 'plate' ? read(cutWidth) : null);
       final p = price.text.trim().isEmpty ? null : read(price);
       final cost = p == null
           ? null
@@ -187,6 +207,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
             value: advanced,
             onChanged: (v) => setState(() {
                   advanced = v;
+                  cutByCount = false;
                   shape = 'round';
                   inputUnit = v ? 'm' : 'piece';
                   quantity.text = '۱';
@@ -245,23 +266,68 @@ class _CalculatorPageState extends State<CalculatorPage> {
                 shape == 'anchor'
                     ? 'طول بازشده هر بولت روی محور میله (متر)'
                     : shape == 'plate'
-                        ? 'طول ورق به متر — مثلاً ۲'
-                        : 'طول یک شاخه به متر — طول واقعی',
+                        ? (cutByCount
+                            ? 'طول شیت فابریک به متر — مثلاً ۲ یا ۲٫۵'
+                            : 'طول ورق به متر — مثلاً ۲')
+                        : (cutByCount
+                            ? 'طول شاخه فابریک به متر — مثلاً ۶ یا ۱۲'
+                            : 'طول یک شاخه به متر — طول واقعی'),
                 length),
+          if (SteelCalculator.cuttableShapes.contains(shape)) ...[
+            const Text('مبنای تعداد (شیت/شاخه کامل یا عدد برش‌خورده)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: [
+                ButtonSegment<bool>(
+                  value: false,
+                  label: Text(shape == 'plate'
+                      ? 'برگ (شیت کامل)'
+                      : 'شاخه کامل'),
+                ),
+                const ButtonSegment<bool>(
+                  value: true,
+                  label: Text('عدد (برش‌خورده)'),
+                ),
+              ],
+              selected: {cutByCount},
+              onSelectionChanged: (s) => setState(() {
+                cutByCount = s.first;
+                if (!cutByCount && priceUnit == 'cut') priceUnit = 'kg';
+                result = null;
+                total = null;
+                error = null;
+              }),
+            ),
+            const SizedBox(height: 12),
+            if (cutByCount) ...[
+              infoBox('معیارهای برش «عدد»',
+                  shape == 'plate'
+                      ? 'ابعاد قطعه برش‌خورده به میلی‌متر را وارد کنید تا هم وزن X عدد و هم تعداد شیت کامل لازم و پرت محاسبه شود.'
+                      : 'طول هر عدد برش‌خورده (میلی‌متر) را وارد کنید تا هم وزن X عدد و هم تعداد شاخه کامل لازم و پرت محاسبه شود.'),
+              if (shape == 'plate')
+                numeric('عرض هر عدد برش‌خورده (میلی‌متر)', cutWidth),
+              numeric('طول هر عدد برش‌خورده (میلی‌متر)', cutLength),
+            ],
+          ],
           numeric(
               shape.startsWith('anchor')
                   ? 'تعداد بولت / انکر / ست کامل'
-                  : shape == 'plate'
-                      ? 'چند برگ ورق می‌خواهی؟'
-                      : 'چند شاخه می‌خواهی؟',
+                  : cutByCount
+                      ? 'تعداد قطعات برش‌خورده (چند عدد؟)'
+                      : shape == 'plate'
+                          ? 'چند برگ ورق می‌خواهی؟'
+                          : 'چند شاخه می‌خواهی؟',
               quantity),
           infoBox(
               'واحدها روشن‌اند',
-              shape == 'plate'
-                  ? 'عرض و طول را به متر و ضخامت را به میلی‌متر وارد کن. نمونه: عرض ۱، طول ۲، ضخامت ۲، تعداد ۱ → ۳۱٫۴ کیلوگرم.'
-                  : shape.startsWith('anchor')
-                      ? 'تعداد، عدد صحیح است؛ وزن بر حسب کیلوگرم. در روش نظری، طول بازشده بر حسب متر است. نرخ هر عدد با هر کیلو فقط با وزن معتبر همان کالا قابل مقایسه است.'
-                      : 'اندازه مقطع به میلی‌متر است. طول شاخه به متر و تعداد، عدد صحیح است. نتیجه، وزن مجموع شاخه‌هاست.'),
+              cutByCount
+                  ? 'تعداد قطعات برش‌خورده (عدد) باید صحیح باشد؛ ابعاد برش به میلی‌متر و ابعاد شیت/شاخه فابریک برای محاسبه تعداد شیت/شاخه کامل لازم و پرت استفاده می‌شوند.'
+                  : shape == 'plate'
+                      ? 'عرض و طول را به متر و ضخامت را به میلی‌متر وارد کن. نمونه: عرض ۱، طول ۲، ضخامت ۲، تعداد ۱ → ۳۱٫۴ کیلوگرم.'
+                      : shape.startsWith('anchor')
+                          ? 'تعداد، عدد صحیح است؛ وزن بر حسب کیلوگرم. در روش نظری، طول بازشده بر حسب متر است. نرخ هر عدد با هر کیلو فقط با وزن معتبر همان کالا قابل مقایسه است.'
+                          : 'اندازه مقطع به میلی‌متر است. طول شاخه به متر و تعداد، عدد صحیح است. نتیجه، وزن مجموع شاخه‌هاست.'),
           ExpansionTile(
               tilePadding: EdgeInsets.zero,
               title: const Text('۳. هزینه هم حساب شود؟ (اختیاری)'),
@@ -272,6 +338,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                     priceUnit,
                     {
                       'kg': 'هر کیلوگرم',
+                      if (cutByCount) 'cut': 'هر عدد (برش‌خورده)',
                       'piece': shape.startsWith('anchor')
                           ? 'هر عدد / ست کامل'
                           : shape == 'plate'
@@ -325,21 +392,36 @@ class _CalculatorPageState extends State<CalculatorPage> {
               {
                 'kg': 'کیلوگرم',
                 'm': 'متر طول',
-                'piece': 'تعداد شاخه / قطعه',
+                'piece': 'تعداد برگ (شیت) / شاخه',
+                if (SteelCalculator.cuttableShapes.contains(shape))
+                  'cut': 'عدد (قطعه برش‌خورده با معیار مشخص)',
                 'm2': 'مترمربع مفید'
               },
               (v) => setState(() {
                     inputUnit = v;
+                    if (v != 'cut' && priceUnit == 'cut') priceUnit = 'kg';
                     result = null;
                     total = null;
                   })),
           const SizedBox(height: 14),
-          numeric('مقدار مورد نیاز', quantity),
+          if (inputUnit == 'cut' &&
+              SteelCalculator.cuttableShapes.contains(shape)) ...[
+            if (shape == 'plate')
+              numeric('عرض هر عدد برش‌خورده (میلی‌متر)', cutWidth),
+            numeric('طول هر عدد برش‌خورده (میلی‌متر)', cutLength),
+          ],
+          numeric(
+              inputUnit == 'cut'
+                  ? 'تعداد قطعات برش‌خورده (عدد)'
+                  : 'مقدار مورد نیاز',
+              quantity),
           if (!['bulk', 'mesh', 'piece', 'anchorMeasured'].contains(shape))
             numeric(
                 shape == 'anchor'
                     ? 'طول بازشده هر بولت روی محور میله (متر)'
-                    : 'طول هر شاخه / قطعه (متر)',
+                    : inputUnit == 'cut'
+                        ? 'طول هر شاخه / برگ فابریک (متر)'
+                        : 'طول هر شاخه / قطعه (متر)',
                 length),
           numeric('پرت یا اضافه سفارش (%)', waste),
           const Divider(height: 30),
@@ -354,7 +436,8 @@ class _CalculatorPageState extends State<CalculatorPage> {
                 'kg': 'تومان / کیلوگرم',
                 'ton': 'تومان / تن',
                 'm': 'تومان / متر',
-                'piece': 'تومان / شاخه یا قطعه',
+                'piece': 'تومان / شاخه یا برگ (شیت)',
+                if (inputUnit == 'cut') 'cut': 'تومان / عدد (برش‌خورده)',
                 'm2': 'تومان / مترمربع'
               },
               (v) => setState(() {
@@ -400,8 +483,40 @@ class _CalculatorPageState extends State<CalculatorPage> {
                           style: const TextStyle(color: Colors.white70)),
                     if (result!.pieces > 0)
                       Text(
-                          'تعداد معادل: ${fmt(result!.pieces, decimals: 3)} • برای خرید قطعه کامل: ${fmt(result!.pieces.ceil())}',
+                          result!.cutAllocation != null
+                              ? 'تعداد برش‌خورده: ${fmt(result!.pieces, decimals: 0)} عدد • وزن هر عدد: ${fmt(result!.cutAllocation!.kgPerCut, decimals: 3)} کیلوگرم'
+                              : 'تعداد معادل: ${fmt(result!.pieces, decimals: 3)} • برای خرید قطعه کامل: ${fmt(result!.pieces.ceil())}',
                           style: const TextStyle(color: Colors.white70)),
+                    if (result!.cutAllocation != null) ...[
+                      const Divider(color: Colors.white24, height: 24),
+                      if (result!.cutAllocation!.fitsInStock) ...[
+                        Text(
+                          'تأمین از ${result!.cutAllocation!.isSheet ? 'شیت' : 'شاخه'} فابریک: '
+                          '${fmt(result!.cutAllocation!.requiredStockPieces)} '
+                          '${result!.cutAllocation!.isSheet ? 'برگ (شیت کامل)' : 'شاخه کامل'} '
+                          '(هر ${result!.cutAllocation!.isSheet ? 'شیت' : 'شاخه'}: ${fmt(result!.cutAllocation!.cutsPerStockPiece)} عدد)',
+                          style: const TextStyle(
+                              color: Color(0xff62e0ce),
+                              fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'وزن کل ${result!.cutAllocation!.isSheet ? 'شیت‌های' : 'شاخه‌های'} مصرفی: '
+                          '${fmt(result!.cutAllocation!.stockTotalKg, decimals: 3)} کیلوگرم',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        Text(
+                          'پرت / باقیمانده برش: ${fmt(result!.cutAllocation!.wasteKg, decimals: 3)} کیلوگرم '
+                          '(${fmt(result!.cutAllocation!.wastePercent, decimals: 1)}٪)'
+                          '${result!.cutAllocation!.isSheet ? ' • ${fmt(result!.cutAllocation!.wasteAreaM2, decimals: 3)} مترمربع' : ' • ${fmt(result!.cutAllocation!.wasteLengthM, decimals: 2)} متر'}',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ] else
+                        const Text(
+                          'هشدار: ابعاد قطعه برش‌خورده از یک شیت/شاخه فابریک بزرگ‌تر است.',
+                          style: TextStyle(color: Colors.amberAccent),
+                        ),
+                    ],
                     if (total != null) ...[
                       const Divider(color: Colors.white24, height: 28),
                       const Text('هزینه برآوردی',

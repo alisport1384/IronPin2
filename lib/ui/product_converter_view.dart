@@ -21,6 +21,9 @@ class _ProductConverterViewState extends State<ProductConverterView> {
   final densityCtl = TextEditingController(text: '۷۸۵۰');
   final inputValueCtl = TextEditingController(text: '۱۰');
   final unitPriceCtl = TextEditingController();
+  final cutWidthCtl = TextEditingController(text: '۳۰۰');
+  final cutLengthCtl = TextEditingController(text: '۴۰۰');
+  bool showCutFields = false;
 
   ConverterProductSpec get spec =>
       converterProducts.firstWhere((p) => p.id == productId);
@@ -43,17 +46,29 @@ class _ProductConverterViewState extends State<ProductConverterView> {
       fieldCtls[f.key] =
           TextEditingController(text: fmt(f.initial, decimals: f.integerOnly ? 0 : 2));
     }
+    cutWidthCtl.text = '۳۰۰';
+    cutLengthCtl.text = productId == 'plate' ? '۴۰۰' : '۱۵۰۰';
     if (!spec.supportedUnits.contains(inputUnit)) {
       inputUnit = spec.supportedUnits.first;
     }
     if (!spec.supportedUnits.contains(priceUnit)) {
       priceUnit = 'kg';
     }
+    if (!spec.supportsCutCount) {
+      showCutFields = false;
+    }
   }
 
   @override
   void dispose() {
-    for (final c in [...fieldCtls.values, densityCtl, inputValueCtl, unitPriceCtl]) {
+    for (final c in [
+      ...fieldCtls.values,
+      densityCtl,
+      inputValueCtl,
+      unitPriceCtl,
+      cutWidthCtl,
+      cutLengthCtl,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -81,12 +96,36 @@ class _ProductConverterViewState extends State<ProductConverterView> {
       if (q == null) {
         return (result: null, error: 'مقدار تبدیل را وارد کنید.');
       }
+      final cutActive = spec.supportsCutCount &&
+          (inputUnit == 'cut' || priceUnit == 'cut' || showCutFields);
+      double? cutLenMm;
+      double? cutWidMm;
+      if (cutActive) {
+        cutLenMm = number(cutLengthCtl.text);
+        if (cutLenMm == null) {
+          return (
+            result: null,
+            error: 'طول هر عدد برش‌خورده (میلی‌متر) را وارد کنید.',
+          );
+        }
+        if (productId == 'plate') {
+          cutWidMm = number(cutWidthCtl.text);
+          if (cutWidMm == null) {
+            return (
+              result: null,
+              error: 'عرض هر عدد برش‌خورده (میلی‌متر) را وارد کنید.',
+            );
+          }
+        }
+      }
       final res = ProductConverter.convert(
         productId: productId,
         fields: fields,
         density: d,
         inputUnit: inputUnit,
         inputValue: q,
+        cutLengthMm: cutLenMm,
+        cutWidthMm: cutWidMm,
       );
       return (result: res, error: null);
     } on FormatException catch (e) {
@@ -128,6 +167,7 @@ class _ProductConverterViewState extends State<ProductConverterView> {
         'kg' => res.totalKg,
         'ton' => res.totalTon,
         'piece' => res.totalPieces,
+        'cut' => res.totalCuts,
         'bundle' => res.totalBundles,
         _ => 0.0,
       };
@@ -172,6 +212,33 @@ class _ProductConverterViewState extends State<ProductConverterView> {
         ],
         const SizedBox(height: 4),
         for (final f in spec.fields) _numField(f.label, fieldCtls[f.key]!),
+        if (spec.supportsCutCount) ...[
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('معیارهای برش «عدد» (قطعه برش‌خورده)'),
+            subtitle: Text(
+                productId == 'plate'
+                    ? 'عرض و طول قطعه برش‌خورده برای تفکیک «عدد» از «برگ (شیت)»'
+                    : 'طول قطعه برش‌خورده برای تفکیک «عدد» از «شاخه»'),
+            value: inputUnit == 'cut' || priceUnit == 'cut' || showCutFields,
+            onChanged: (v) => setState(() {
+              showCutFields = v;
+              if (!v) {
+                if (inputUnit == 'cut') inputUnit = spec.supportedUnits.first;
+                if (priceUnit == 'cut') priceUnit = 'kg';
+              }
+            }),
+          ),
+          if (inputUnit == 'cut' || priceUnit == 'cut' || showCutFields) ...[
+            if (productId == 'plate')
+              _numField('عرض هر عدد برش‌خورده (میلی‌متر)', cutWidthCtl),
+            _numField(
+                productId == 'plate'
+                    ? 'طول هر عدد برش‌خورده (میلی‌متر)'
+                    : 'طول هر عدد برش‌خورده (میلی‌متر؛ مثلاً ۱۵۰۰ = ۱٫۵ متر)',
+                cutLengthCtl),
+          ],
+        ],
         const Divider(height: 24),
         const Text('۲. مقدار و واحد مبدأ برای تبدیل',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -238,6 +305,36 @@ class _ProductConverterViewState extends State<ProductConverterView> {
                   value:
                       '${fmt(res.totalPieces, decimals: 2)} ${ProductConverter.unitLabel(spec, 'piece')} (خرید کامل: ${fmt(res.totalPieces.ceil())})',
                 ),
+                if (res.cutAllocation != null) ...[
+                  _ResultLine(
+                    label: 'تعداد برش‌خورده (عدد)',
+                    value:
+                        '${fmt(res.totalCuts, decimals: 2)} عدد (هر عدد: ${fmt(res.kgPerCut, decimals: 3)} کیلو)',
+                  ),
+                  if (res.cutAllocation!.fitsInStock)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'تأمین از ${res.cutAllocation!.isSheet ? 'شیت' : 'شاخه'} فابریک: '
+                        '${fmt(res.cutAllocation!.requiredStockPieces)} ${spec.pieceLabel} '
+                        '(هر ${res.cutAllocation!.isSheet ? 'شیت' : 'شاخه'}: ${fmt(res.cutAllocation!.cutsPerStockPiece)} عدد) • '
+                        'پرت: ${fmt(res.cutAllocation!.wasteKg, decimals: 2)} کیلو (${fmt(res.cutAllocation!.wastePercent, decimals: 1)}٪)',
+                        style: const TextStyle(
+                          color: Color(0xff62e0ce),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  else
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6),
+                      child: Text(
+                        'ابعاد برش از یک شیت/شاخه فابریک بزرگ‌تر است.',
+                        style: TextStyle(color: Colors.amberAccent, fontSize: 12),
+                      ),
+                    ),
+                ],
                 _ResultLine(
                   label: 'تعداد ${spec.bundleLabel}',
                   value:
@@ -344,6 +441,9 @@ class _ProductConverterViewState extends State<ProductConverterView> {
                             '• هر مترمربع: ${fmt(totalCost / res.totalAreaM2)} تومان'),
                       Text(
                           '• هر ${ProductConverter.unitLabel(spec, 'piece')}: ${fmt(totalCost / res.totalPieces)} تومان'),
+                      if (res.totalCuts > 0)
+                        Text(
+                            '• هر عدد (برش‌خورده): ${fmt(totalCost / res.totalCuts)} تومان'),
                       Text(
                           '• هر ${spec.bundleLabel}: ${fmt(totalCost / res.totalBundles)} تومان'),
                     ],

@@ -161,13 +161,66 @@ const shapes = [
       'تبدیل متراژ بدون وزن واحد معتبر مجاز نیست؛ فقط وزن واقعی ثبت‌شده محاسبه می‌شود.'),
 ];
 
+class CutAllocationResult {
+  final bool isSheet;
+  final bool fitsInStock;
+  final int cutsPerStockPiece;
+  final int requiredStockPieces;
+  final double kgPerCut;
+  final double areaPerCutM2;
+  final double cutLengthM;
+  final double cutWidthMm;
+  final double totalCuts;
+  final double stockPieceKg;
+  final double stockTotalKg;
+  final double wasteKg;
+  final double wasteLengthM;
+  final double wasteAreaM2;
+  final double wastePercent;
+
+  const CutAllocationResult({
+    required this.isSheet,
+    required this.fitsInStock,
+    required this.cutsPerStockPiece,
+    required this.requiredStockPieces,
+    required this.kgPerCut,
+    required this.areaPerCutM2,
+    required this.cutLengthM,
+    required this.cutWidthMm,
+    required this.totalCuts,
+    required this.stockPieceKg,
+    required this.stockTotalKg,
+    required this.wasteKg,
+    required this.wasteLengthM,
+    required this.wasteAreaM2,
+    required this.wastePercent,
+  });
+}
+
 class WeightResult {
   final double kg, metres, pieces, area, kgPerMetre;
+  final CutAllocationResult? cutAllocation;
   const WeightResult(
-      this.kg, this.metres, this.pieces, this.area, this.kgPerMetre);
+      this.kg, this.metres, this.pieces, this.area, this.kgPerMetre,
+      {this.cutAllocation});
 }
 
 class SteelCalculator {
+  static const cuttableShapes = <String>{
+    'round',
+    'plate',
+    'flat',
+    'pipe',
+    'rhs',
+    'angle',
+    'channel',
+    'ibeam',
+    'tee',
+    'square',
+    'hex',
+    'catalog',
+  };
+
   static WeightResult calculate(
       {required String shape,
       required Map<String, double> values,
@@ -175,7 +228,9 @@ class SteelCalculator {
       required String inputUnit,
       required double quantity,
       double lengthPerPiece = 6,
-      double wastePercent = 0}) {
+      double wastePercent = 0,
+      double? cutLengthMm,
+      double? cutWidthMm}) {
     if (!density.isFinite ||
         density <= 0 ||
         !quantity.isFinite ||
@@ -188,11 +243,12 @@ class SteelCalculator {
       throw const FormatException(
           'چگالی، مقدار و طول باید مثبت و پرت بین صفر تا صد باشد.');
     }
-    if (!['kg', 'm', 'piece', 'm2'].contains(inputUnit)) {
+    if (!['kg', 'm', 'piece', 'm2', 'cut'].contains(inputUnit)) {
       throw const FormatException('واحد مقدار نامعتبر است.');
     }
-    if (inputUnit == 'piece' && quantity != quantity.roundToDouble()) {
-      throw const FormatException('تعداد قطعه ورودی باید صحیح باشد.');
+    if ((inputUnit == 'piece' || inputUnit == 'cut') &&
+        quantity != quantity.roundToDouble()) {
+      throw const FormatException('تعداد ورودی باید عدد صحیح باشد.');
     }
     final spec = shapes.firstWhere((s) => s.id == shape);
     for (final f in spec.fields) {
@@ -301,7 +357,102 @@ class SteelCalculator {
     if (shape == 'anchor') kgm += v('extraKg') / lengthPerPiece;
     final discrete = ['mesh', 'piece', 'anchorMeasured'].contains(shape);
     double kg = 0, metres = 0, pieces = 0, area = 0;
-    if (discrete) {
+    CutAllocationResult? cutAlloc;
+    if (inputUnit == 'cut') {
+      if (!cuttableShapes.contains(shape)) {
+        throw const FormatException(
+            'برش به عدد برای این نوع کالا تعریف نشده است.');
+      }
+      if (cutLengthMm == null || !cutLengthMm.isFinite || cutLengthMm <= 0) {
+        throw const FormatException(
+            'طول هر عدد برش‌خورده (میلی‌متر) باید بزرگ‌تر از صفر باشد.');
+      }
+      final cutLenM = cutLengthMm / 1000.0;
+      final stockPieceKg = kgm * lengthPerPiece;
+      if (shape == 'plate') {
+        if (cutWidthMm == null || !cutWidthMm.isFinite || cutWidthMm <= 0) {
+          throw const FormatException(
+              'عرض هر عدد برش‌خورده (میلی‌متر) باید بزرگ‌تر از صفر باشد.');
+        }
+        final areaPerCut = (cutWidthMm / 1000.0) * cutLenM;
+        final kgPerCut =
+            (v('t') * cutWidthMm * cutLengthMm * density / 1e9) +
+                areaPerCut * (v('coat') / 1000.0);
+        final stockW = v('b');
+        final stockL = lengthPerPiece * 1000.0;
+        final fitNormal = (stockW ~/ cutWidthMm) * (stockL ~/ cutLengthMm);
+        final fitRotated = (stockW ~/ cutLengthMm) * (stockL ~/ cutWidthMm);
+        final cutsPerStock = math.max(fitNormal, fitRotated);
+        final fits = cutsPerStock > 0;
+        final requiredStock =
+            fits ? (quantity / cutsPerStock).ceil() : 0;
+        final stockTotalKg = requiredStock * stockPieceKg;
+        final netKg = quantity * kgPerCut;
+        final wasteKg = fits ? math.max(0.0, stockTotalKg - netKg) : 0.0;
+        final stockArea = (stockW / 1000.0) * lengthPerPiece;
+        final wasteArea =
+            fits ? math.max(0.0, requiredStock * stockArea - quantity * areaPerCut) : 0.0;
+        final wastePct =
+            stockTotalKg > 0 ? (wasteKg / stockTotalKg) * 100.0 : 0.0;
+        kg = netKg;
+        area = quantity * areaPerCut;
+        metres = v('b') > 0 ? area / (v('b') / 1000.0) : 0;
+        pieces = quantity;
+        cutAlloc = CutAllocationResult(
+          isSheet: true,
+          fitsInStock: fits,
+          cutsPerStockPiece: cutsPerStock,
+          requiredStockPieces: requiredStock,
+          kgPerCut: kgPerCut,
+          areaPerCutM2: areaPerCut,
+          cutLengthM: cutLenM,
+          cutWidthMm: cutWidthMm,
+          totalCuts: quantity,
+          stockPieceKg: stockPieceKg,
+          stockTotalKg: stockTotalKg,
+          wasteKg: wasteKg,
+          wasteLengthM: 0,
+          wasteAreaM2: wasteArea,
+          wastePercent: wastePct,
+        );
+      } else {
+        final kgPerCut = kgm * cutLenM;
+        final areaPerCut = unitArea * cutLenM;
+        final cutsPerStock = (lengthPerPiece + 1e-9) ~/ cutLenM;
+        final fits = cutsPerStock > 0;
+        final requiredStock =
+            fits ? (quantity / cutsPerStock).ceil() : 0;
+        final stockTotalKg = requiredStock * stockPieceKg;
+        final netKg = quantity * kgPerCut;
+        final wasteKg = fits ? math.max(0.0, stockTotalKg - netKg) : 0.0;
+        final wasteLength = fits
+            ? math.max(0.0, requiredStock * lengthPerPiece - quantity * cutLenM)
+            : 0.0;
+        final wastePct =
+            stockTotalKg > 0 ? (wasteKg / stockTotalKg) * 100.0 : 0.0;
+        metres = quantity * cutLenM;
+        kg = netKg;
+        area = quantity * areaPerCut;
+        pieces = quantity;
+        cutAlloc = CutAllocationResult(
+          isSheet: false,
+          fitsInStock: fits,
+          cutsPerStockPiece: cutsPerStock,
+          requiredStockPieces: requiredStock,
+          kgPerCut: kgPerCut,
+          areaPerCutM2: areaPerCut,
+          cutLengthM: cutLenM,
+          cutWidthMm: 0,
+          totalCuts: quantity,
+          stockPieceKg: stockPieceKg,
+          stockTotalKg: stockTotalKg,
+          wasteKg: wasteKg,
+          wasteLengthM: wasteLength,
+          wasteAreaM2: 0,
+          wastePercent: wastePct,
+        );
+      }
+    } else if (discrete) {
       if (inputUnit == 'm2' && unitArea <= 0) {
         throw const FormatException(
             'برای بولت/انکر مساحت تعریف نشده؛ تعداد یا وزن انتخاب کنید.');
@@ -343,7 +494,8 @@ class SteelCalculator {
     }
     final factor = 1 + wastePercent / 100;
     return WeightResult(
-        kg * factor, metres * factor, pieces * factor, area * factor, kgm);
+        kg * factor, metres * factor, pieces * factor, area * factor, kgm,
+        cutAllocation: cutAlloc);
   }
 
   static double cost(WeightResult r, String priceUnit, double price,
@@ -363,7 +515,16 @@ class SteelCalculator {
       'kg' => r.kg,
       'ton' => r.kg / 1000,
       'm' => r.metres,
-      'piece' => r.pieces,
+      'cut' => r.cutAllocation != null
+          ? r.pieces
+          : throw const FormatException('تبدیل به واحد قیمت انتخابی ممکن نیست.'),
+      'piece' => r.cutAllocation != null
+          ? (r.cutAllocation!.fitsInStock
+              ? r.cutAllocation!.requiredStockPieces.toDouble()
+              : (r.cutAllocation!.stockPieceKg > 0
+                  ? r.kg / r.cutAllocation!.stockPieceKg
+                  : 0.0))
+          : r.pieces,
       'm2' => r.area,
       _ => throw const FormatException('واحد قیمت نامعتبر است.')
     };

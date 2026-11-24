@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'calculator.dart';
 
 class MetalAlloy {
   final String id, label;
@@ -34,7 +35,7 @@ class ConverterField {
 
 class ConverterProductSpec {
   final String id, title, subtitle, pieceLabel, bundleLabel, note;
-  final bool hasMetres, hasArea, usesDensity;
+  final bool hasMetres, hasArea, usesDensity, supportsCutCount;
   final List<ConverterField> fields;
   const ConverterProductSpec({
     required this.id,
@@ -45,6 +46,7 @@ class ConverterProductSpec {
     required this.hasMetres,
     required this.hasArea,
     required this.usesDensity,
+    this.supportsCutCount = false,
     required this.fields,
     required this.note,
   });
@@ -55,6 +57,7 @@ class ConverterProductSpec {
         'kg',
         'ton',
         'piece',
+        if (supportsCutCount) 'cut',
         'bundle',
       ];
 }
@@ -69,16 +72,17 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: true,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('thicknessMm', 'ضخامت ورق (میلی‌متر)', 2),
-      ConverterField('widthMm', 'عرض ورق (میلی‌متر؛ مثلاً ۱۲۵۰ یا ۱۰۰۰)', 1250),
-      ConverterField('pieceLengthM', 'طول هر برگ (متر؛ مثلاً ۲٫۵ یا ۲)', 2.5),
+      ConverterField('widthMm', 'عرض شیت فابریک (میلی‌متر؛ مثلاً ۱۲۵۰ یا ۱۰۰۰)', 1250),
+      ConverterField('pieceLengthM', 'طول هر برگ / شیت (متر؛ مثلاً ۲٫۵ یا ۲)', 2.5),
       ConverterField('coatGsm', 'جرم پوشش دو رو (گرم بر مترمربع؛ صفر = بدون پوشش)', 0,
           allowZero: true),
       ConverterField('piecesPerBundle', 'تعداد برگ در هر بسته / پالت', 20),
     ],
     note:
-        'وزن = طول × عرض × ضخامت × چگالی جنس (+ پوشش اعلامی). می‌توانید متراژ طولی با عرض ثابت، مترمربع، کیلوگرم، تن، تعداد برگ یا بسته را مستقیماً به یکدیگر تبدیل کنید.',
+        'وزن = طول × عرض × ضخامت × چگالی جنس (+ پوشش اعلامی). «برگ (شیت)» مربوط به ورق کامل و «عدد» مربوط به قطعات برش‌خورده با عرض و طول مشخص است.',
   ),
   ConverterProductSpec(
     id: 'rebar',
@@ -89,13 +93,14 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('diameterMm', 'قطر / سایز میلگرد (میلی‌متر)', 16),
       ConverterField('pieceLengthM', 'طول هر شاخه (متر؛ معمولاً ۱۲)', 12),
       ConverterField('piecesPerBundle', 'تعداد شاخه در هر بندیل / دسته', 100),
     ],
     note:
-        'تعداد شاخه در هر بندیل بسته به کارخانه و سایز متفاوت است (معمولاً بین ۵۰ تا ۴۵۰ شاخه؛ حدود ۲ تا ۵٫۵ تن)؛ مقدار واقعی بندیل را وارد کنید.',
+        'تعداد شاخه در هر بندیل بسته به کارخانه و سایز متفاوت است (معمولاً بین ۵۰ تا ۴۵۰ شاخه؛ حدود ۲ تا ۵٫۵ تن). برای محاسبه قطعه برش‌خورده با طول دلخواه، واحد «عدد» را انتخاب کنید.',
   ),
   ConverterProductSpec(
     id: 'rhs',
@@ -106,6 +111,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('heightMm', 'ارتفاع / ضلع اول (میلی‌متر)', 40),
       ConverterField('widthMm', 'عرض / ضلع دوم (میلی‌متر)', 40),
@@ -124,6 +130,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('odMm', 'قطر خارجی واقعی (میلی‌متر؛ نه نمره اینچی)', 48.3),
       ConverterField('thicknessMm', 'ضخامت جداره (میلی‌متر)', 2),
@@ -141,6 +148,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: true,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('widthMm', 'عرض تسمه (میلی‌متر)', 50),
       ConverterField('thicknessMm', 'ضخامت تسمه (میلی‌متر)', 5),
@@ -158,6 +166,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('leg1Mm', 'اندازه بال اول (میلی‌متر)', 50),
       ConverterField('leg2Mm', 'اندازه بال دوم (میلی‌متر)', 50),
@@ -176,6 +185,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('heightMm', 'ارتفاع کل (میلی‌متر)', 100),
       ConverterField('widthMm', 'عرض بال (میلی‌متر)', 50),
@@ -195,6 +205,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('heightMm', 'ارتفاع کل مقطع (میلی‌متر)', 180),
       ConverterField('widthMm', 'عرض بال (میلی‌متر)', 91),
@@ -214,6 +225,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: false,
+    supportsCutCount: true,
     fields: [
       ConverterField('kgPerMetre', 'وزن هر متر از جدول سازنده (کیلوگرم بر متر)', 18.8),
       ConverterField('pieceLengthM', 'طول هر شاخه (متر؛ معمولاً ۱۲)', 12),
@@ -230,6 +242,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('heightMm', 'ارتفاع کل (میلی‌متر)', 50),
       ConverterField('widthMm', 'عرض بال (میلی‌متر)', 50),
@@ -249,6 +262,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('heightMm', 'ارتفاع (میلی‌متر)', 40),
       ConverterField('widthMm', 'عرض (میلی‌متر)', 40),
@@ -266,6 +280,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('flatToFlatMm', 'فاصله دو وجه موازی آچارخور (میلی‌متر)', 30),
       ConverterField('pieceLengthM', 'طول هر شاخه (متر)', 6),
@@ -282,6 +297,7 @@ const converterProducts = <ConverterProductSpec>[
     hasMetres: true,
     hasArea: false,
     usesDensity: true,
+    supportsCutCount: true,
     fields: [
       ConverterField('diameterMm', 'قطر مفتول (میلی‌متر)', 2.5),
       ConverterField('pieceLengthM', 'متراژ یک کلاف / حلقه (متر)', 100),
@@ -374,6 +390,9 @@ class ProductConversionResult {
   final double totalAreaM2;
   final double totalPieces;
   final double totalBundles;
+  final double kgPerCut;
+  final double totalCuts;
+  final CutAllocationResult? cutAllocation;
 
   const ProductConversionResult({
     required this.spec,
@@ -390,6 +409,9 @@ class ProductConversionResult {
     required this.totalAreaM2,
     required this.totalPieces,
     required this.totalBundles,
+    this.kgPerCut = 0,
+    this.totalCuts = 0,
+    this.cutAllocation,
   });
 
   /// Breaks total pieces into whole bundles + remaining pieces.
@@ -407,7 +429,8 @@ class ProductConverter {
         'm2' => 'مترمربع',
         'kg' => 'کیلوگرم',
         'ton' => 'تن',
-        'piece' => spec.pieceLabel == 'عدد' ? 'عدد' : '${spec.pieceLabel} (عدد)',
+        'piece' => spec.pieceLabel,
+        'cut' => 'عدد (قطعه برش‌خورده)',
         'bundle' => spec.bundleLabel,
         _ => unit,
       };
@@ -418,6 +441,8 @@ class ProductConverter {
     required double density,
     required String inputUnit,
     required double inputValue,
+    double? cutLengthMm,
+    double? cutWidthMm,
   }) {
     final spec = converterProducts.firstWhere(
       (p) => p.id == productId,
@@ -557,34 +582,164 @@ class ProductConverter {
       areaPerPiece = areaPerMetre * pieceLengthM;
       final kgPerBundle = kgPerPiece * piecesPerBundle;
 
+      double kgPerCut = 0;
+      double areaPerCut = 0;
+      double cutLenM = 0;
+      bool hasValidCutSpec = false;
+
+      if (spec.supportsCutCount) {
+        final hasLen =
+            cutLengthMm != null && cutLengthMm.isFinite && cutLengthMm > 0;
+        final hasWid =
+            cutWidthMm != null && cutWidthMm.isFinite && cutWidthMm > 0;
+        if (inputUnit == 'cut') {
+          if (!hasLen) {
+            throw const FormatException(
+                'طول هر عدد برش‌خورده (میلی‌متر) باید بزرگ‌تر از صفر باشد.');
+          }
+          if (productId == 'plate' && !hasWid) {
+            throw const FormatException(
+                'عرض هر عدد برش‌خورده (میلی‌متر) باید بزرگ‌تر از صفر باشد.');
+          }
+        }
+        if (hasLen && (productId != 'plate' || hasWid)) {
+          hasValidCutSpec = true;
+          cutLenM = cutLengthMm / 1000.0;
+          if (productId == 'plate') {
+            final t = f('thicknessMm');
+            final coat = f('coatGsm');
+            areaPerCut = (cutWidthMm! / 1000.0) * cutLenM;
+            kgPerCut = (t * cutWidthMm * cutLengthMm * density / 1e9) +
+                areaPerCut * (coat / 1000.0);
+          } else {
+            kgPerCut = kgPerMetre * cutLenM;
+            areaPerCut = areaPerMetre * cutLenM;
+          }
+        }
+      }
+
       late final double totalMetres;
+      late final double totalKg;
+      late final double totalAreaM2;
+      late final double totalCuts;
       switch (inputUnit) {
         case 'm':
           totalMetres = inputValue;
+          totalKg = totalMetres * kgPerMetre;
+          totalAreaM2 = totalMetres * areaPerMetre;
+          totalCuts = hasValidCutSpec && kgPerCut > 0 ? totalKg / kgPerCut : 0;
           break;
         case 'm2':
           totalMetres = inputValue / areaPerMetre;
+          totalKg = totalMetres * kgPerMetre;
+          totalAreaM2 = inputValue;
+          totalCuts = hasValidCutSpec && kgPerCut > 0 ? totalKg / kgPerCut : 0;
           break;
         case 'kg':
-          totalMetres = inputValue / kgPerMetre;
+          totalKg = inputValue;
+          totalMetres = totalKg / kgPerMetre;
+          totalAreaM2 = totalMetres * areaPerMetre;
+          totalCuts = hasValidCutSpec && kgPerCut > 0 ? totalKg / kgPerCut : 0;
           break;
         case 'ton':
-          totalMetres = (inputValue * 1000.0) / kgPerMetre;
+          totalKg = inputValue * 1000.0;
+          totalMetres = totalKg / kgPerMetre;
+          totalAreaM2 = totalMetres * areaPerMetre;
+          totalCuts = hasValidCutSpec && kgPerCut > 0 ? totalKg / kgPerCut : 0;
           break;
         case 'piece':
           totalMetres = inputValue * pieceLengthM;
+          totalKg = totalMetres * kgPerMetre;
+          totalAreaM2 = totalMetres * areaPerMetre;
+          totalCuts = hasValidCutSpec && kgPerCut > 0 ? totalKg / kgPerCut : 0;
           break;
         case 'bundle':
           totalMetres = inputValue * piecesPerBundle * pieceLengthM;
+          totalKg = totalMetres * kgPerMetre;
+          totalAreaM2 = totalMetres * areaPerMetre;
+          totalCuts = hasValidCutSpec && kgPerCut > 0 ? totalKg / kgPerCut : 0;
+          break;
+        case 'cut':
+          totalCuts = inputValue;
+          totalKg = totalCuts * kgPerCut;
+          totalAreaM2 = totalCuts * areaPerCut;
+          totalMetres = productId == 'plate'
+              ? (areaPerMetre > 0 ? totalAreaM2 / areaPerMetre : 0)
+              : totalCuts * cutLenM;
           break;
         default:
           throw const FormatException('واحد ورودی برای این کالا مجاز نیست.');
       }
 
-      final totalKg = totalMetres * kgPerMetre;
-      final totalPieces = totalMetres / pieceLengthM;
+      final totalPieces = totalKg / kgPerPiece;
       final totalBundles = totalPieces / piecesPerBundle;
-      final totalAreaM2 = totalMetres * areaPerMetre;
+
+      CutAllocationResult? cutAlloc;
+      if (hasValidCutSpec && totalCuts > 0) {
+        if (productId == 'plate') {
+          final stockW = f('widthMm');
+          final stockL = pieceLengthM * 1000.0;
+          final fitNormal = (stockW ~/ cutWidthMm!) * (stockL ~/ cutLengthMm!);
+          final fitRotated = (stockW ~/ cutLengthMm) * (stockL ~/ cutWidthMm);
+          final cutsPerStock = math.max(fitNormal, fitRotated);
+          final fits = cutsPerStock > 0;
+          final requiredStock =
+              fits ? (totalCuts / cutsPerStock).ceil() : 0;
+          final stockTotalKg = requiredStock * kgPerPiece;
+          final wasteKg = fits ? math.max(0.0, stockTotalKg - totalKg) : 0.0;
+          final wasteArea = fits
+              ? math.max(0.0, requiredStock * areaPerPiece - totalAreaM2)
+              : 0.0;
+          final wastePct =
+              stockTotalKg > 0 ? (wasteKg / stockTotalKg) * 100.0 : 0.0;
+          cutAlloc = CutAllocationResult(
+            isSheet: true,
+            fitsInStock: fits,
+            cutsPerStockPiece: cutsPerStock,
+            requiredStockPieces: requiredStock,
+            kgPerCut: kgPerCut,
+            areaPerCutM2: areaPerCut,
+            cutLengthM: cutLenM,
+            cutWidthMm: cutWidthMm,
+            totalCuts: totalCuts,
+            stockPieceKg: kgPerPiece,
+            stockTotalKg: stockTotalKg,
+            wasteKg: wasteKg,
+            wasteLengthM: 0,
+            wasteAreaM2: wasteArea,
+            wastePercent: wastePct,
+          );
+        } else {
+          final cutsPerStock = (pieceLengthM + 1e-9) ~/ cutLenM;
+          final fits = cutsPerStock > 0;
+          final requiredStock =
+              fits ? (totalCuts / cutsPerStock).ceil() : 0;
+          final stockTotalKg = requiredStock * kgPerPiece;
+          final wasteKg = fits ? math.max(0.0, stockTotalKg - totalKg) : 0.0;
+          final wasteLength = fits
+              ? math.max(0.0, requiredStock * pieceLengthM - totalCuts * cutLenM)
+              : 0.0;
+          final wastePct =
+              stockTotalKg > 0 ? (wasteKg / stockTotalKg) * 100.0 : 0.0;
+          cutAlloc = CutAllocationResult(
+            isSheet: false,
+            fitsInStock: fits,
+            cutsPerStockPiece: cutsPerStock,
+            requiredStockPieces: requiredStock,
+            kgPerCut: kgPerCut,
+            areaPerCutM2: areaPerCut,
+            cutLengthM: cutLenM,
+            cutWidthMm: 0,
+            totalCuts: totalCuts,
+            stockPieceKg: kgPerPiece,
+            stockTotalKg: stockTotalKg,
+            wasteKg: wasteKg,
+            wasteLengthM: wasteLength,
+            wasteAreaM2: 0,
+            wastePercent: wastePct,
+          );
+        }
+      }
 
       return ProductConversionResult(
         spec: spec,
@@ -601,6 +756,9 @@ class ProductConverter {
         totalAreaM2: totalAreaM2,
         totalPieces: totalPieces,
         totalBundles: totalBundles,
+        kgPerCut: kgPerCut,
+        totalCuts: totalCuts,
+        cutAllocation: cutAlloc,
       );
     } else {
       // Discrete surface/piece products (mesh, cut_plate, unit_item, rabitz/turi)

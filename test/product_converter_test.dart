@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ironpin/domain/calculator.dart';
 import 'package:ironpin/domain/product_converter.dart';
 import 'package:ironpin/ui/calculator_page.dart';
 
@@ -197,8 +198,85 @@ void main() {
       expect(
         ProductConverter.unitLabel(
             converterProducts.firstWhere((p) => p.id == 'rebar'), 'piece'),
-        'شاخه (عدد)',
+        'شاخه',
       );
+      expect(
+        ProductConverter.unitLabel(
+            converterProducts.firstWhere((p) => p.id == 'plate'), 'piece'),
+        'برگ (شیت)',
+      );
+      expect(
+        ProductConverter.unitLabel(
+            converterProducts.firstWhere((p) => p.id == 'rebar'), 'cut'),
+        'عدد (قطعه برش‌خورده)',
+      );
+    });
+
+    test('cut (عدد) is distinct from sheet/branch and calculates stock pieces & waste', () {
+      // 50 cut plates of 300x400x10mm from standard 1250x2500mm sheets
+      final cutPlate = ProductConverter.convert(
+        productId: 'plate',
+        fields: {
+          'thicknessMm': 10,
+          'widthMm': 1250,
+          'pieceLengthM': 2.5,
+          'coatGsm': 0,
+          'piecesPerBundle': 20,
+        },
+        density: 7850,
+        inputUnit: 'cut',
+        inputValue: 50,
+        cutWidthMm: 300,
+        cutLengthMm: 400,
+      );
+      expect(cutPlate.totalCuts, closeTo(50, 1e-9));
+      expect(cutPlate.kgPerCut, closeTo(9.42, 1e-9));
+      expect(cutPlate.totalKg, closeTo(471.0, 1e-9));
+      expect(cutPlate.totalAreaM2, closeTo(6.0, 1e-9));
+      expect(cutPlate.cutAllocation, isNotNull);
+      expect(cutPlate.cutAllocation!.fitsInStock, isTrue);
+      expect(cutPlate.cutAllocation!.cutsPerStockPiece, 24);
+      expect(cutPlate.cutAllocation!.requiredStockPieces, 3);
+      expect(cutPlate.cutAllocation!.wasteKg, greaterThan(0));
+
+      // 15 cut rebar pieces of 1500mm (1.5m) from standard 12m branches
+      final cutRebar = ProductConverter.convert(
+        productId: 'rebar',
+        fields: {
+          'diameterMm': 16,
+          'pieceLengthM': 12,
+          'piecesPerBundle': 100,
+        },
+        density: 7850,
+        inputUnit: 'cut',
+        inputValue: 15,
+        cutLengthMm: 1500,
+      );
+      expect(cutRebar.totalMetres, closeTo(22.5, 1e-9));
+      expect(cutRebar.cutAllocation!.cutsPerStockPiece, 8);
+      expect(cutRebar.cutAllocation!.requiredStockPieces, 2);
+      expect(cutRebar.cutAllocation!.wasteLengthM, closeTo(1.5, 1e-9));
+    });
+
+    test('SteelCalculator supports cut (عدد) with stock allocation and distinct cost pricing', () {
+      final res = SteelCalculator.calculate(
+        shape: 'plate',
+        values: {'b': 1250, 't': 10, 'coat': 0},
+        density: 7850,
+        inputUnit: 'cut',
+        quantity: 50,
+        lengthPerPiece: 2.5,
+        cutWidthMm: 300,
+        cutLengthMm: 400,
+      );
+      expect(res.pieces, closeTo(50, 1e-9));
+      expect(res.kg, closeTo(471.0, 1e-9));
+      expect(res.cutAllocation, isNotNull);
+      expect(res.cutAllocation!.requiredStockPieces, 3);
+      expect(res.cutAllocation!.cutsPerStockPiece, 24);
+      // Price per cut piece vs price per full sheet
+      expect(SteelCalculator.cost(res, 'cut', 100000), closeTo(5000000, 1e-6));
+      expect(SteelCalculator.cost(res, 'piece', 1000000), closeTo(3000000, 1e-6));
     });
 
     test('rejects invalid geometry and unsupported units', () {
@@ -246,6 +324,30 @@ void main() {
     expect(find.text('۱. انتخاب کالا و مشخصات اختصاصی'), findsOneWidget);
     // Default sheet: 10m x 1250mm x 2mm steel = 196.250 kg
     expect(find.textContaining('۱۹۶٫۲۵۰ کیلوگرم'), findsOneWidget);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('CalculatorPage simple mode calculates X cut pieces (عدد) and stock allocation',
+      (t) async {
+    await t.pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+    await t.pumpAndSettle();
+
+    expect(find.text('عدد (برش‌خورده)'), findsOneWidget);
+    await t.tap(find.text('عدد (برش‌خورده)'));
+    await t.pumpAndSettle();
+
+    expect(find.text('طول هر عدد برش‌خورده (میلی‌متر)'), findsOneWidget);
+    expect(find.text('تعداد قطعات برش‌خورده (چند عدد؟)'), findsOneWidget);
+
+    await t.enterText(
+        find.widgetWithText(TextField, 'تعداد قطعات برش‌خورده (چند عدد؟)'), '۱۰');
+    await t.ensureVisible(find.text('محاسبه'));
+    await t.tap(find.text('محاسبه'));
+    await t.pumpAndSettle();
+
+    expect(find.textContaining('تعداد برش‌خورده: ۱۰ عدد'), findsOneWidget);
+    expect(find.textContaining('تأمین از شاخه فابریک:'), findsOneWidget);
+    expect(find.textContaining('پرت / باقیمانده برش:'), findsOneWidget);
     expect(t.takeException(), isNull);
   });
 }
