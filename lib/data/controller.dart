@@ -1807,6 +1807,10 @@ class MarketController extends ChangeNotifier {
     _notify();
   }
 
+  static bool _isEmptyContentFormatError(Object error) =>
+      error is FormatException &&
+      error.message.startsWith('متن پیام/ردیف قیمت در پاسخ عمومی پیدا نشد');
+
   Future<void> _recordSourceScanned(String endpointId) async {
     scannedAtMap[endpointId] = DateTime.now().toUtc();
     final snapshot = jsonEncode({
@@ -2010,6 +2014,9 @@ class MarketController extends ChangeNotifier {
                   error is FormatException
                       ? error.message
                       : 'خطا در اتصال/مهلت دریافت؛ داده قبلی حفظ شد.');
+              if (_isEmptyContentFormatError(error)) {
+                await _recordSourceScanned(e.id);
+              }
             }
             finished++;
             _progress();
@@ -2301,6 +2308,9 @@ class MarketController extends ChangeNotifier {
                 error is FormatException
                     ? error.message
                     : 'خطا در اتصال/مهلت دریافت؛ داده قبلی حفظ شد.');
+            if (_isEmptyContentFormatError(error)) {
+              await _recordSourceScanned(e.id);
+            }
           }
         }
         finished++;
