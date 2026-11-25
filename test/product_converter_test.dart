@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ironpin/domain/calculator.dart';
+import 'package:ironpin/domain/market_tables.dart';
 import 'package:ironpin/domain/product_converter.dart';
 import 'package:ironpin/ui/calculator_page.dart';
 
@@ -312,16 +313,14 @@ void main() {
     });
   });
 
-  testWidgets('CalculatorPage switches to ProductConverterView and converts live',
+  testWidgets('CalculatorPage opens directly on ProductConverterView and converts live',
       (t) async {
     await t.pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
     await t.pumpAndSettle();
 
-    expect(find.text('تبدیل واحد کالا'), findsOneWidget);
-    await t.tap(find.text('تبدیل واحد کالا'));
-    await t.pumpAndSettle();
-
-    expect(find.text('۱. انتخاب کالا و مشخصات اختصاصی'), findsOneWidget);
+    expect(find.text('ماشین حساب و تبدیل واحد'), findsOneWidget);
+    expect(find.text('تبدیل واحد و خدمات'), findsOneWidget);
+    expect(find.text('۱. انتخاب کالا، جدول استاندارد یا ابعاد'), findsOneWidget);
     // Default sheet: 10m x 1250mm x 2mm steel = 196.250 kg
     expect(find.textContaining('۱۹۶٫۲۵۰ کیلوگرم'), findsOneWidget);
     expect(t.takeException(), isNull);
@@ -330,6 +329,8 @@ void main() {
   testWidgets('CalculatorPage simple mode calculates X cut pieces (عدد) and stock allocation',
       (t) async {
     await t.pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+    await t.pumpAndSettle();
+    await t.tap(find.text('فرمولی کلاسیک'));
     await t.pumpAndSettle();
 
     expect(find.text('عدد (برش‌خورده)'), findsOneWidget);
@@ -354,5 +355,173 @@ void main() {
     expect(find.textContaining('تأمین از شاخه فابریک:'), findsOneWidget);
     expect(find.textContaining('پرت / باقیمانده برش:'), findsOneWidget);
     expect(t.takeException(), isNull);
+  });
+
+  group('Iranian market presets, light/heavy, new products & services', () {
+    test('light vs heavy RHS, H-beam, channel, pipe & angle 8x8 market tables work accurately', () {
+      // نبشی ۸ در ۸ (۶ متر = ۵۸ کیلوگرم)
+      final angleGroup = marketPresetGroups['angle']!;
+      final angle8 = angleGroup.lightItems.firstWhere((e) => e.id == '8');
+      final angleRes = ProductConverter.convert(
+        productId: 'angle',
+        fields: {'leg1Mm': 80, 'leg2Mm': 80, 'thicknessMm': 8, 'pieceLengthM': 6, 'piecesPerBundle': 20},
+        density: 7850,
+        inputUnit: 'piece',
+        inputValue: 1,
+        overrideKgPerMetre: angle8.kgPerMetre,
+      );
+      expect(angleRes.totalKg, closeTo(58.2, 0.5));
+
+      // قوطی ۴۰×۴۰ سبک (۱۴ کگ) در برابر سنگین (۱۷.۱ کگ)
+      final rhsGroup = marketPresetGroups['rhs']!;
+      final rhsLight = rhsGroup.lightItems.firstWhere((e) => e.id == '40x40');
+      final rhsHeavy = rhsGroup.heavyItems.firstWhere((e) => e.id == '40x40');
+      final resL = ProductConverter.convert(
+        productId: 'rhs',
+        fields: {'heightMm': 40, 'widthMm': 40, 'thicknessMm': 2, 'pieceLengthM': 6, 'piecesPerBundle': 12},
+        density: 7850,
+        inputUnit: 'piece',
+        inputValue: 1,
+        overrideKgPerMetre: rhsLight.kgPerMetre,
+      );
+      final resH = ProductConverter.convert(
+        productId: 'rhs',
+        fields: {'heightMm': 40, 'widthMm': 40, 'thicknessMm': 2, 'pieceLengthM': 6, 'piecesPerBundle': 12},
+        density: 7850,
+        inputUnit: 'piece',
+        inputValue: 1,
+        overrideKgPerMetre: rhsHeavy.kgPerMetre,
+      );
+      expect(resL.totalKg, closeTo(14.0, 1e-6));
+      expect(resH.totalKg, closeTo(17.1, 1e-6));
+      expect(resH.totalKg, greaterThan(resL.totalKg));
+
+      // هاش ۲۰ سبک (۵۰۸) و سنگین (۷۳۶)
+      final hbGroup = marketPresetGroups['hbeam']!;
+      expect(hbGroup.lightItems.firstWhere((e) => e.id == '20').kgPerPiece, 508);
+      expect(hbGroup.heavyItems.firstWhere((e) => e.id == '20').kgPerPiece, 736);
+    });
+
+    test('8mm 20x20cm plate, mesh 11m2, stud 19x100, wallpost kg->m, gutter m->kg & ghameh', () {
+      // ورق ۸ میل ۲۰×۲۰ سانتی‌متر (= ۲۰۰×۲۰۰ میلی‌متر)
+      final plate20 = ProductConverter.convert(
+        productId: 'cut_plate',
+        fields: {'thicknessMm': 8, 'widthMm': 200, 'lengthMm': 200, 'piecesPerBundle': 10},
+        density: 7850,
+        inputUnit: 'piece',
+        inputValue: 1,
+      );
+      expect(plate20.kgPerPiece, closeTo(2.512, 1e-6));
+
+      // توری ۱۱ مترمربع (۲ کیلو در مترمربع)
+      final mesh11 = ProductConverter.convert(
+        productId: 'mesh_area',
+        fields: {'kgPerM2': 2.0, 'areaPerPieceM2': 2.0, 'piecesPerBundle': 10},
+        density: 7850,
+        inputUnit: 'm2',
+        inputValue: 11,
+      );
+      expect(mesh11.totalAreaM2, closeTo(11, 1e-9));
+      expect(mesh11.totalKg, closeTo(22, 1e-9));
+      expect(mesh11.totalPieces, closeTo(5.5, 1e-9));
+
+      // گل‌میخ ۱۹×۱۰۰ میلی‌متر (~۰.۲۶۲ کیلوگرم)
+      final stud19 = ProductConverter.convert(
+        productId: 'stud',
+        fields: {'diameterMm': 19, 'lengthMm': 100, 'piecesPerBundle': 80},
+        density: 7850,
+        inputUnit: 'piece',
+        inputValue: 100,
+      );
+      expect(stud19.kgPerPiece, closeTo(0.262, 0.015));
+
+      // وال‌پست ورودی کیلوگرم -> متراژ و شاخه
+      final wp = ProductConverter.convert(
+        productId: 'wallpost',
+        fields: {'thicknessMm': 2, 'widthMm': 250, 'pieceLengthM': 3, 'piecesPerBundle': 10},
+        density: 7850,
+        inputUnit: 'kg',
+        inputValue: 392.5,
+      );
+      expect(wp.totalMetres, closeTo(100, 1e-6));
+      expect(wp.totalPieces, closeTo(100 / 3, 1e-6));
+
+      // آبرو متراژ -> وزن و مساحت ورق
+      final gt = ProductConverter.convert(
+        productId: 'gutter',
+        fields: {'thicknessMm': 1, 'widthMm': 500, 'coatGsm': 0, 'pieceLengthM': 6, 'piecesPerBundle': 10},
+        density: 7850,
+        inputUnit: 'm',
+        inputValue: 24,
+      );
+      expect(gt.totalPieces, closeTo(4, 1e-9));
+      expect(gt.totalAreaM2, closeTo(12, 1e-9));
+      expect(gt.totalKg, closeTo(94.2, 1e-6));
+
+      // قامه میلگرد ۱۸ + متعلقات مهره و واشر
+      final gh = ProductConverter.convert(
+        productId: 'ghameh',
+        fields: {'diameterMm': 18, 'pieceLengthM': 0.5, 'accessoriesKg': 0.1, 'piecesPerBundle': 25},
+        density: 7850,
+        inputUnit: 'piece',
+        inputValue: 10,
+      );
+      expect(gh.totalMetres, closeTo(5, 1e-9));
+      expect(gh.totalKg, greaterThan(10.9));
+    });
+
+    test('order pricing computes base + cut/thread-bend/punch/laser/drill services + tax/shipping', () {
+      final rebar18 = ProductConverter.convert(
+        productId: 'rebar',
+        fields: {'diameterMm': 18, 'pieceLengthM': 12, 'piecesPerBundle': 100},
+        density: 7850,
+        inputUnit: 'piece',
+        inputValue: 10,
+      );
+      final order = ProductConverter.calculateOrderCost(
+        conversion: rebar18,
+        basePriceUnit: 'kg',
+        baseUnitPrice: 100000,
+        services: const [
+          OrderServiceInput(name: 'برش', unit: 'piece', unitPrice: 15000),
+          OrderServiceInput(name: 'رزوه و خم', unit: 'manual', manualQuantity: 20, unitPrice: 25000),
+          OrderServiceInput(name: 'پانچ', unit: 'manual', manualQuantity: 40, unitPrice: 5000),
+          OrderServiceInput(name: 'لیزر', unit: 'm', unitPrice: 2000),
+          OrderServiceInput(name: 'دریل', unit: 'flat', unitPrice: 100000),
+        ],
+        shipping: 500000,
+        taxPercent: 10,
+        taxIncludesServices: true,
+      );
+      // 10*15k + 20*25k + 40*5k + 120*2k + 100k = 150k + 500k + 200k + 240k + 100k = 1,190,000
+      expect(order.servicesTotal, closeTo(1190000, 1e-6));
+      expect(order.baseCost, closeTo(rebar18.totalKg * 100000, 1e-3));
+      expect(order.grandTotal, closeTo((order.baseCost + 1190000) * 1.10 + 500000, 1e-2));
+      expect(order.finalPerKg, greaterThan(100000));
+    });
+
+    testWidgets('ProductConverterView adds services (برش، رزوه و خم) and computes final price',
+        (t) async {
+      await t.pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+      await t.pumpAndSettle();
+
+      await t.ensureVisible(find.text('+ برش'));
+      await t.tap(find.text('+ برش'));
+      await t.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'نام خدمت'), findsOneWidget);
+
+      await t.ensureVisible(find.text('+ رزوه و خم'));
+      await t.tap(find.text('+ رزوه و خم'));
+      await t.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'نام خدمت'), findsNWidgets(2));
+
+      await t.ensureVisible(find.widgetWithText(TextField, 'قیمت پایه کالا (تومان)'));
+      await t.enterText(find.widgetWithText(TextField, 'قیمت پایه کالا (تومان)'), '100000');
+      await t.pumpAndSettle();
+
+      await t.ensureVisible(find.text('قیمت نهایی سفارش و ریز خدمات'));
+      expect(find.text('قیمت نهایی سفارش و ریز خدمات'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
   });
 }

@@ -51,7 +51,7 @@ void main() {
     expect(find.text('قیمت‌ها'), findsOneWidget);
     expect(find.text('نمودار'), findsOneWidget);
     expect(find.text('رنج‌گیری'), findsOneWidget);
-    expect(find.text('محاسبات'), findsOneWidget);
+    expect(find.text('ماشین حساب'), findsOneWidget);
     expect(find.text('اطلاعات'), findsOneWidget);
     expect(find.text('هنوز قیمتی دریافت نشده'), findsOneWidget);
     final element = t.element(find.byType(NavigationBar));
@@ -59,9 +59,9 @@ void main() {
     await t.tap(find.text('نمودار'));
     await t.pumpAndSettle();
     expect(find.text('سری قابل نمایش وجود ندارد'), findsOneWidget);
-    await t.tap(find.text('محاسبات'));
+    await t.tap(find.text('ماشین حساب'));
     await t.pumpAndSettle();
-    expect(find.text('محاسبه وزن و هزینه'), findsOneWidget);
+    expect(find.text('ماشین حساب و تبدیل واحد'), findsOneWidget);
     await t.tap(find.text('اطلاعات'));
     await t.pumpAndSettle();
     expect(find.text('اطلاعات و منابع'), findsOneWidget);
@@ -95,6 +95,8 @@ void main() {
       (t) async {
     await t
         .pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+    await t.pumpAndSettle();
+    await t.tap(find.text('فرمولی کلاسیک'));
     await t.pumpAndSettle();
     final button = find.text('محاسبه');
     await t.scrollUntilVisible(button, 500,
@@ -150,7 +152,9 @@ void main() {
       (t) async {
     await t.pumpWidget(IronPinApp(controller: c));
     await t.pumpAndSettle();
-    await t.tap(find.text('محاسبات'));
+    await t.tap(find.text('ماشین حساب'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('فرمولی کلاسیک'));
     await t.pumpAndSettle();
     expect(find.text('۱. چه کالایی داری؟'), findsOneWidget);
     expect(find.text('چگالی (کیلوگرم بر مترمکعب)'), findsNothing);
@@ -158,7 +162,7 @@ void main() {
     await t.enterText(first, '20');
     await t.tap(find.text('قیمت‌ها'));
     await t.pumpAndSettle();
-    await t.tap(find.text('محاسبات'));
+    await t.tap(find.text('ماشین حساب'));
     await t.pumpAndSettle();
     expect((t.widget<TextField>(find.byType(TextField).first)).controller!.text,
         '20');
@@ -170,6 +174,8 @@ void main() {
       (t) async {
     await t
         .pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+    await t.pumpAndSettle();
+    await t.tap(find.text('فرمولی کلاسیک'));
     await t.pumpAndSettle();
     await t.tap(find.text('میلگرد'));
     await t.pumpAndSettle();
@@ -190,6 +196,8 @@ void main() {
       (t) async {
     await t
         .pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+    await t.pumpAndSettle();
+    await t.tap(find.text('فرمولی کلاسیک'));
     await t.pumpAndSettle();
     await t.tap(find.text('میلگرد'));
     await t.pumpAndSettle();

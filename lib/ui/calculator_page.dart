@@ -17,7 +17,7 @@ class CalculatorPage extends StatefulWidget {
 }
 
 class _CalculatorPageState extends State<CalculatorPage> {
-  bool converterMode = false;
+  bool converterMode = true;
   bool advanced = false;
   bool cutByCount = false;
   String shape = 'round', inputUnit = 'm', priceUnit = 'kg', metal = 'steel';
@@ -167,30 +167,30 @@ class _CalculatorPageState extends State<CalculatorPage> {
       ListView(padding: const EdgeInsets.all(20), children: [
         Row(children: [
           const Expanded(
-              child: Text('محاسبه وزن و هزینه',
+              child: Text('ماشین حساب و تبدیل واحد',
                   style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold))),
           IconButton(
               tooltip: 'منابع فرمول‌ها',
               onPressed: () => showCalculationSources(context),
               icon: const Icon(Icons.menu_book_outlined))
         ]),
-        const Text('کیلوگرم، متراژ، تعداد و مساحت — با واحد صریح',
+        const Text('محاسبه وزن، متراژ، شاخه، بندیل، سبک/سنگین و خدمات برش و خم',
             style: TextStyle(fontSize: 12, color: muted)),
         Text(
-            'شهر سراسری: ${widget.city.isEmpty ? 'همه شهرها' : widget.city}؛ این حسابگر از ورودی دستی استفاده می‌کند، نه قیمت شهر دیگر.',
+            'شهر سراسری: ${widget.city.isEmpty ? 'همه شهرها' : widget.city}؛ این ماشین حساب از ورودی دستی استفاده می‌کند، نه قیمت شهر دیگر.',
             style: const TextStyle(fontSize: 11, color: muted)),
         const SizedBox(height: 14),
         SegmentedButton<bool>(
           segments: const [
             ButtonSegment<bool>(
-              value: false,
-              icon: Icon(Icons.calculate_outlined, size: 18),
-              label: Text('وزن و هزینه'),
-            ),
-            ButtonSegment<bool>(
               value: true,
               icon: Icon(Icons.swap_horiz_rounded, size: 18),
-              label: Text('تبدیل واحد کالا'),
+              label: Text('تبدیل واحد و خدمات'),
+            ),
+            ButtonSegment<bool>(
+              value: false,
+              icon: Icon(Icons.calculate_outlined, size: 18),
+              label: Text('فرمولی کلاسیک'),
             ),
           ],
           selected: {converterMode},

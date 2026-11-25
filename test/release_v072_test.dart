@@ -336,6 +336,9 @@ void main() {
       (t) async {
     await t
         .pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+    await t.pumpAndSettle();
+    await t.tap(find.text('فرمولی کلاسیک'));
+    await t.pumpAndSettle();
     await t.tap(find.byType(DropdownButtonFormField<String>).first);
     await t.pumpAndSettle();
     expect(find.text('تسمه فولادی').last, findsOneWidget);
@@ -361,6 +364,9 @@ void main() {
         (t) async {
       await t.pumpWidget(
           const MaterialApp(home: Scaffold(body: CalculatorPage())));
+      await t.pumpAndSettle();
+      await t.tap(find.text('فرمولی کلاسیک'));
+      await t.pumpAndSettle();
       await t.tap(find.byType(DropdownButtonFormField<String>).first);
       await t.pumpAndSettle();
       await t.tap(find.text(spec.first).last);

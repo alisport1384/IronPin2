@@ -391,7 +391,7 @@ class _MarketHomeState extends State<MarketHome> with WidgetsBindingObserver {
                 NavigationDestination(
                     icon: Icon(Icons.calculate_outlined),
                     selectedIcon: Icon(Icons.calculate),
-                    label: 'محاسبات'),
+                    label: 'ماشین حساب'),
                 NavigationDestination(
                     icon: Icon(Icons.info_outline),
                     selectedIcon: Icon(Icons.info),
