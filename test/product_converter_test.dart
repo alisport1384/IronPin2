@@ -502,24 +502,35 @@ void main() {
 
     testWidgets('ProductConverterView adds services (برش، رزوه و خم) and computes final price',
         (t) async {
+      t.view.physicalSize = const Size(800, 1200);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
       await t.pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
       await t.pumpAndSettle();
 
-      await t.ensureVisible(find.text('+ برش'));
+      final listScroll = find.byType(Scrollable).first;
+      await t.scrollUntilVisible(find.text('+ برش'), 300, scrollable: listScroll);
+      await t.pumpAndSettle();
       await t.tap(find.text('+ برش'));
       await t.pumpAndSettle();
       expect(find.widgetWithText(TextField, 'نام خدمت'), findsOneWidget);
 
-      await t.ensureVisible(find.text('+ رزوه و خم'));
+      await t.scrollUntilVisible(find.text('+ رزوه و خم'), 300, scrollable: listScroll);
+      await t.pumpAndSettle();
       await t.tap(find.text('+ رزوه و خم'));
       await t.pumpAndSettle();
       expect(find.widgetWithText(TextField, 'نام خدمت'), findsNWidgets(2));
 
-      await t.ensureVisible(find.widgetWithText(TextField, 'قیمت پایه کالا (تومان)'));
-      await t.enterText(find.widgetWithText(TextField, 'قیمت پایه کالا (تومان)'), '100000');
+      final priceField = find.widgetWithText(TextField, 'قیمت پایه کالا (تومان)');
+      await t.scrollUntilVisible(priceField, -250, scrollable: listScroll);
+      await t.pumpAndSettle();
+      await t.enterText(priceField, '100000');
       await t.pumpAndSettle();
 
-      await t.ensureVisible(find.text('قیمت نهایی سفارش و ریز خدمات'));
+      await t.scrollUntilVisible(
+          find.text('قیمت نهایی سفارش و ریز خدمات'), 300,
+          scrollable: listScroll);
       expect(find.text('قیمت نهایی سفارش و ریز خدمات'), findsOneWidget);
       expect(t.takeException(), isNull);
     });
