@@ -235,7 +235,8 @@ void main() {
       ),
     ));
 
-    expect(find.text('۳۳٬۰۰۰٬۰۰۰'), findsOneWidget);
+    expect(find.textContaining('۳۳٬۰۰۰٬۰۰۰'), findsOneWidget);
+    expect(find.textContaining('۳۶٬۳۰۰٬۰۰۰'), findsNothing);
     expect(find.textContaining('چند مبلغی'), findsNothing);
     expect(find.text('نامشخص'), findsOneWidget);
     expect(find.text('بدون قیمت معتبر'), findsOneWidget);
