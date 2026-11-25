@@ -5,6 +5,7 @@ import '../domain/market_tables.dart';
 import '../domain/money.dart';
 import '../domain/product_converter.dart';
 import 'common.dart';
+import 'visual_help.dart';
 
 class _ServiceDraft {
   final int id;
@@ -296,17 +297,29 @@ class _ProductConverterViewState extends State<ProductConverterView> {
     }
   }
 
-  Widget _numField(String label, TextEditingController ctl, {bool enabled = true}) =>
+  Widget _numField(String label, TextEditingController ctl,
+          {bool enabled = true, String? helpTopic}) =>
       Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextField(
           controller: ctl,
           enabled: enabled,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: label),
+          decoration: InputDecoration(
+            labelText: label,
+            suffixIcon:
+                helpTopic == null ? null : HelpBadge(topic: helpTopic, size: 16),
+          ),
           onChanged: (_) => setState(() {}),
         ),
       );
+
+  String _helpTopicForField(String key) => switch (key) {
+        'piecesPerBundle' => 'bundle',
+        'pieceLengthM' => productId,
+        'kgPerM2' || 'areaPerPieceM2' => 'mesh_area',
+        _ => productId,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -393,8 +406,15 @@ class _ProductConverterViewState extends State<ProductConverterView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('۱. انتخاب کالا، جدول استاندارد یا ابعاد',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('۱. انتخاب کالا، جدول استاندارد یا ابعاد',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            HelpBadge(topic: productId, size: 17),
+          ],
+        ),
         const SizedBox(height: 10),
         selectField(
           'کالای آهن‌آلات',
@@ -404,58 +424,78 @@ class _ProductConverterViewState extends State<ProductConverterView> {
             productId = v;
             _initFieldsForProduct();
           }),
+          helpTopic: productId,
         ),
         const SizedBox(height: 6),
         infoBox('مشخصات کالا: ${spec.subtitle}', spec.note),
         if (group != null) ...[
           const SizedBox(height: 8),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment<bool>(
-                value: true,
-                icon: Icon(Icons.table_chart_outlined, size: 17),
-                label: Text('جدول بازار (سبک/سنگین)'),
+          Row(
+            children: [
+              Expanded(
+                child: SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment<bool>(
+                      value: true,
+                      icon: Icon(Icons.table_chart_outlined, size: 17),
+                      label: Text('جدول بازار (سبک/سنگین)'),
+                    ),
+                    ButtonSegment<bool>(
+                      value: false,
+                      icon: Icon(Icons.straighten_outlined, size: 17),
+                      label: Text('ابعاد / وزن دستی'),
+                    ),
+                  ],
+                  selected: {usePreset},
+                  onSelectionChanged: (s) => setState(() {
+                    usePreset = s.first;
+                    if (usePreset && selectedPreset != null) {
+                      _applyPresetValues(selectedPreset!);
+                    }
+                  }),
+                ),
               ),
-              ButtonSegment<bool>(
-                value: false,
-                icon: Icon(Icons.straighten_outlined, size: 17),
-                label: Text('ابعاد / وزن دستی'),
+              const SizedBox(width: 4),
+              HelpBadge(
+                topic: group.hasLightHeavy ? 'light_heavy' : productId,
+                size: 17,
               ),
             ],
-            selected: {usePreset},
-            onSelectionChanged: (s) => setState(() {
-              usePreset = s.first;
-              if (usePreset && selectedPreset != null) {
-                _applyPresetValues(selectedPreset!);
-              }
-            }),
           ),
           if (usePreset) ...[
             const SizedBox(height: 10),
             if (group.hasLightHeavy) ...[
-              SegmentedButton<bool>(
-                segments: [
-                  ButtonSegment<bool>(
-                    value: false,
-                    label: Text(group.lightLabel),
+              Row(
+                children: [
+                  Expanded(
+                    child: SegmentedButton<bool>(
+                      segments: [
+                        ButtonSegment<bool>(
+                          value: false,
+                          label: Text(group.lightLabel),
+                        ),
+                        ButtonSegment<bool>(
+                          value: true,
+                          label: Text(group.heavyLabel),
+                        ),
+                      ],
+                      selected: {useHeavyPreset},
+                      onSelectionChanged: (s) => setState(() {
+                        useHeavyPreset = s.first;
+                        final items = activePresetItems;
+                        if (items.isNotEmpty) {
+                          if (!items.any((it) => it.id == presetId)) {
+                            presetId = items.first.id;
+                          }
+                          final cur = selectedPreset;
+                          if (cur != null) _applyPresetValues(cur);
+                        }
+                      }),
+                    ),
                   ),
-                  ButtonSegment<bool>(
-                    value: true,
-                    label: Text(group.heavyLabel),
-                  ),
+                  const SizedBox(width: 4),
+                  const HelpBadge(topic: 'light_heavy', size: 17),
                 ],
-                selected: {useHeavyPreset},
-                onSelectionChanged: (s) => setState(() {
-                  useHeavyPreset = s.first;
-                  final items = activePresetItems;
-                  if (items.isNotEmpty) {
-                    if (!items.any((it) => it.id == presetId)) {
-                      presetId = items.first.id;
-                    }
-                    final cur = selectedPreset;
-                    if (cur != null) _applyPresetValues(cur);
-                  }
-                }),
               ),
               if (group.lightHeavyReason.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -474,6 +514,7 @@ class _ProductConverterViewState extends State<ProductConverterView> {
                 final cur = selectedPreset;
                 if (cur != null) _applyPresetValues(cur);
               }),
+              helpTopic: productId,
             ),
           ],
         ],
@@ -522,10 +563,12 @@ class _ProductConverterViewState extends State<ProductConverterView> {
                 densityCtl.text = fmt(alloy.density);
               }
             }),
+            helpTopic: 'density',
           ),
           const SizedBox(height: 10),
           if (alloyId == 'custom')
-            _numField('چگالی سفارشی جنس (کیلوگرم بر مترمکعب)', densityCtl),
+            _numField('چگالی سفارشی جنس (کیلوگرم بر مترمکعب)', densityCtl,
+                helpTopic: 'density'),
         ],
         if (!usePreset && supportsCmDimensions) ...[
           SwitchListTile(
@@ -542,11 +585,18 @@ class _ProductConverterViewState extends State<ProductConverterView> {
               f.key == 'pieceLengthM' ||
               f.key == 'piecesPerBundle' ||
               (productId == 'mesh_area' && f.key == 'areaPerPieceM2'))
-            _numField(_fieldLabel(f), fieldCtls[f.key]!),
+            _numField(_fieldLabel(f), fieldCtls[f.key]!,
+                helpTopic: _helpTopicForField(f.key)),
         if (spec.supportsCutCount) ...[
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('معیارهای برش «عدد» (قطعه برش‌خورده)'),
+            title: Row(
+              children: [
+                const Expanded(
+                    child: Text('معیارهای برش «عدد» (قطعه برش‌خورده)')),
+                const HelpBadge(topic: 'cut_piece', size: 16),
+              ],
+            ),
             subtitle: Text(productId == 'plate'
                 ? 'عرض و طول قطعه برش‌خورده برای تفکیک «عدد» از «برگ (شیت)»'
                 : 'طول قطعه برش‌خورده برای تفکیک «عدد» از «شاخه»'),
@@ -561,33 +611,49 @@ class _ProductConverterViewState extends State<ProductConverterView> {
           ),
           if (inputUnit == 'cut' || priceUnit == 'cut' || showCutFields) ...[
             if (productId == 'plate')
-              _numField('عرض هر عدد برش‌خورده (میلی‌متر)', cutWidthCtl),
+              _numField('عرض هر عدد برش‌خورده (میلی‌متر)', cutWidthCtl,
+                  helpTopic: 'cut_piece'),
             _numField(
                 productId == 'plate'
                     ? 'طول هر عدد برش‌خورده (میلی‌متر)'
                     : 'طول هر عدد برش‌خورده (میلی‌متر؛ مثلاً ۱۵۰۰ = ۱٫۵ متر)',
-                cutLengthCtl),
+                cutLengthCtl,
+                helpTopic: 'cut_piece'),
           ],
         ],
         const Divider(height: 24),
-        const Text('۲. مقدار و واحد مبدأ برای تبدیل دوطرفه',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('۲. مقدار سفارش شما چقدر است؟ (تبدیل به همه واحدها)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            const HelpBadge(topic: 'order_qty', size: 17),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'بخش ۱ فقط وزن یک متر/شاخه را می‌سازد؛ اینجا مقدار کل سفارش (مثلاً ۵۰۰ کیلو یا ۱۰ شاخه) را بزنید تا معادل بقیه واحدها حساب شود.',
+          style: TextStyle(fontSize: 11, color: muted, height: 1.6),
+        ),
         const SizedBox(height: 10),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               flex: 5,
-              child: _numField('مقدار ورودی', inputValueCtl),
+              child: _numField('مقدار سفارش', inputValueCtl,
+                  helpTopic: 'order_qty'),
             ),
             const SizedBox(width: 10),
             Expanded(
               flex: 6,
               child: selectField(
-                'واحد ورودی',
+                'بر حسب واحد',
                 inputUnit,
                 unitOptions,
                 (v) => setState(() => inputUnit = v),
+                helpTopic: 'order_qty',
               ),
             ),
           ],
@@ -709,15 +775,23 @@ class _ProductConverterViewState extends State<ProductConverterView> {
             ),
           ),
           const Divider(height: 28),
-          const Text('۳. قیمت پایه، خدمات جانبی و قیمت نهایی',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Row(
+            children: [
+              const Expanded(
+                child: Text('۳. قیمت پایه، خدمات جانبی و قیمت نهایی',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              const HelpBadge(topic: 'services', size: 17),
+            ],
+          ),
           const SizedBox(height: 10),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 flex: 5,
-                child: _numField('قیمت پایه کالا (تومان)', unitPriceCtl),
+                child: _numField('قیمت پایه کالا (تومان)', unitPriceCtl,
+                    helpTopic: 'basis'),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -727,13 +801,22 @@ class _ProductConverterViewState extends State<ProductConverterView> {
                   priceUnit,
                   priceOptions,
                   (v) => setState(() => priceUnit = v),
+                  helpTopic: 'basis',
                 ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          const Text('خدمات (برش، رزوه و خم، پانچ، لیزر، دریل یا خدمت دلخواه)',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                    'خدمات (برش، رزوه و خم، پانچ، لیزر، دریل یا خدمت دلخواه)',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              ),
+              const HelpBadge(topic: 'services', size: 16),
+            ],
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -779,9 +862,11 @@ class _ProductConverterViewState extends State<ProductConverterView> {
           const SizedBox(height: 6),
           Row(
             children: [
-              Expanded(child: _numField('کرایه حمل کل (تومان)', shippingCtl)),
+              Expanded(
+                  child: _numField('کرایه حمل کل (تومان)', shippingCtl,
+                      helpTopic: 'services')),
               const SizedBox(width: 10),
-              Expanded(child: _numField('مالیات (٪)', taxPctCtl)),
+              Expanded(child: _numField('مالیات (٪)', taxPctCtl, helpTopic: 'tax')),
             ],
           ),
           if ((number(taxPctCtl.text) ?? 0) > 0 && _services.isNotEmpty)

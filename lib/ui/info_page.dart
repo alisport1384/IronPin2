@@ -7,6 +7,7 @@ import 'common.dart';
 import 'finder_panel.dart';
 import 'prices_page.dart';
 import 'backup_panel.dart';
+import 'visual_help.dart';
 
 class InfoPage extends StatefulWidget {
   final MarketController c;
@@ -488,33 +489,38 @@ class _InfoPageState extends State<InfoPage> {
             Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: DropdownButtonFormField<String>(
-                    value: c.externalScanMode ? 'external' : 'internal',
-                    decoration:
-                        const InputDecoration(labelText: 'روش دریافت قیمت'),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'internal',
-                          child: Text('داخلی — اسکنرهای روی گوشی')),
-                      DropdownMenuItem(
-                          value: 'external',
-                          child: Text('خارجی — منابع کشف‌شده از سرور')),
-                    ],
-                    onChanged: c.busy || c.transferring
-                        ? null
-                        : (mode) async {
-                            if (mode == null) return;
-                            try {
-                              await c.setScanMode(mode == 'external');
-                              if (mounted) setState(() {});
-                            } catch (_) {
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text(
-                                          'تغییر حالت هنگام اجرای اسکن ممکن نیست.')));
-                            }
-                          })),
+                child: Row(children: [
+                  Expanded(
+                      child: DropdownButtonFormField<String>(
+                          value: c.externalScanMode ? 'external' : 'internal',
+                          decoration: const InputDecoration(
+                              labelText: 'روش دریافت قیمت'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'internal',
+                                child: Text('داخلی — اسکنرهای روی گوشی')),
+                            DropdownMenuItem(
+                                value: 'external',
+                                child: Text('خارجی — منابع کشف‌شده از سرور')),
+                          ],
+                          onChanged: c.busy || c.transferring
+                              ? null
+                              : (mode) async {
+                                  if (mode == null) return;
+                                  try {
+                                    await c.setScanMode(mode == 'external');
+                                    if (mounted) setState(() {});
+                                  } catch (_) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                            content: Text(
+                                                'تغییر حالت هنگام اجرای اسکن ممکن نیست.')));
+                                  }
+                                })),
+                  const SizedBox(width: 4),
+                  const HelpBadge(topic: 'sources', size: 17),
+                ])),
             if (c.externalScanMode)
               Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -716,18 +722,24 @@ class _InfoPageState extends State<InfoPage> {
               labelText: 'جستجو در فروشندگان و منابع',
               prefixIcon: Icon(Icons.search)),
           onChanged: (v) => setState(() => query = v)),
-      OutlinedButton.icon(
-          onPressed: () async {
-            final v = await showSearch<String?>(
-                context: context, delegate: CitySearch(c.cities));
-            if (v != null) {
-              await c.setCity(v);
-              if (mounted) setState(() {});
-            }
-          },
-          icon: const Icon(Icons.location_on_outlined),
-          label: Text(
-              city.isEmpty ? 'شهر سراسری: تمام شهرها' : 'شهر سراسری: $city')),
+      Row(children: [
+        Expanded(
+            child: OutlinedButton.icon(
+                onPressed: () async {
+                  final v = await showSearch<String?>(
+                      context: context, delegate: CitySearch(c.cities));
+                  if (v != null) {
+                    await c.setCity(v);
+                    if (mounted) setState(() {});
+                  }
+                },
+                icon: const Icon(Icons.location_on_outlined),
+                label: Text(city.isEmpty
+                    ? 'شهر سراسری: تمام شهرها'
+                    : 'شهر سراسری: $city'))),
+        const SizedBox(width: 4),
+        const HelpBadge(topic: 'city_scope', size: 17),
+      ]),
       const SizedBox(height: 10),
       Container(
           decoration: BoxDecoration(
@@ -752,6 +764,7 @@ class _InfoPageState extends State<InfoPage> {
         const Expanded(
             child: Text('منابع و آدرس‌ها',
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold))),
+        const HelpBadge(topic: 'sources', size: 16),
         PopupMenuButton<String>(
             tooltip: 'منابع کشف‌شده، منابع داخلی و آدرس‌ها',
             onSelected: (key) {

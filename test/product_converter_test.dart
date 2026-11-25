@@ -534,5 +534,20 @@ void main() {
       expect(find.text('قیمت نهایی سفارش و ریز خدمات'), findsOneWidget);
       expect(t.takeException(), isNull);
     });
+
+    testWidgets('HelpBadge (!) opens visual guide sheet without overflow',
+        (t) async {
+      await t.pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+      await t.pumpAndSettle();
+
+      final badges = find.text('!');
+      expect(badges, findsWidgets);
+      await t.tap(badges.first);
+      await t.pumpAndSettle();
+
+      expect(find.byType(CustomPaint), findsWidgets);
+      expect(find.textContaining('ورق تخت'), findsWidgets);
+      expect(t.takeException(), isNull);
+    });
   });
 }

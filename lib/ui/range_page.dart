@@ -13,6 +13,7 @@ import '../domain/product_schema.dart';
 import 'calculator_page.dart';
 import 'common.dart';
 import 'tax_chip.dart';
+import 'visual_help.dart';
 
 /// The amount a candidate really carries, in the unit it announced, so the list
 /// can never show an entry without a price.
@@ -352,6 +353,27 @@ class _RangePageState extends State<RangePage> {
     }
   }
 
+  String _rangeFieldTopic(String key) {
+    if (key == 'grade' || key == 'standard' || key == 'alloy') {
+      return 'spec_filter';
+    }
+    return switch (family) {
+      'ورق' => 'plate',
+      'میلگرد' => 'rebar',
+      'پروفیل' || 'قوطی' => 'rhs',
+      'لوله' => 'pipe',
+      'نبشی' => 'angle',
+      'ناودانی' => 'channel',
+      'تیرآهن' => 'beam',
+      'هاش' => 'hbeam',
+      'سپری' => 'tee',
+      'تسمه' => 'flat',
+      'بولت' => 'ghameh',
+      'توری' || 'رابیتس' => 'mesh',
+      _ => 'spec_filter',
+    };
+  }
+
   Widget input(String key) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: TextField(
@@ -360,7 +382,8 @@ class _RangePageState extends State<RangePage> {
           decoration: InputDecoration(
               labelText: productFields[family]![key],
               hintText: 'اختیاری؛ خالی یعنی همه',
-              helperText: 'عدد و واحد طبق منبع؛ مقدار نامعلوم حدس زده نمی‌شود'),
+              helperText: 'عدد و واحد طبق منبع؛ مقدار نامعلوم حدس زده نمی‌شود',
+              suffixIcon: HelpBadge(topic: _rangeFieldTopic(key))),
           onChanged: (_) => setState(invalidate)));
   @override
   Widget build(BuildContext context) {
@@ -403,15 +426,24 @@ class _RangePageState extends State<RangePage> {
     final hiddenUnpriced = _hiddenUnpricedCache;
     final shown = _shownCache;
     return ListView(padding: const EdgeInsets.all(14), children: [
-      Text('رنج‌گیری ${windowText(widget.c.rangeWindow)}',
-          style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
+      Row(children: [
+        Expanded(
+            child: Text('رنج‌گیری ${windowText(widget.c.rangeWindow)}',
+                style:
+                    const TextStyle(fontSize: 21, fontWeight: FontWeight.bold))),
+        const HelpBadge(topic: 'range_stats', size: 17),
+      ]),
       const Text('نوع محصول ← مشخصات ← مود قیمت ← تأیید',
           style: TextStyle(color: muted)),
       const Text(
           'مبنای تازگی: تاریخ اعلام نرخ/انتشار منبع؛ نه زمان دریافت. شهر سراسری از بخش اطلاعات اعمال می‌شود؛ دریافت منابع مستقل است.',
           style: TextStyle(fontSize: 12, height: 1.8)),
-      Text(
-          'شهر سراسری: ${widget.c.selectedCity.isEmpty ? 'همه شهرها' : widget.c.selectedCity}'),
+      Row(children: [
+        Expanded(
+            child: Text(
+                'شهر سراسری: ${widget.c.selectedCity.isEmpty ? 'همه شهرها' : widget.c.selectedCity}')),
+        const HelpBadge(topic: 'city_scope', size: 15),
+      ]),
       windowChip('بازه زمانی', widget.c.rangeDays, (v) {
         unawaited(widget.c.setTabDays('range', v));
         if (mounted) setState(invalidate);
@@ -465,7 +497,9 @@ class _RangePageState extends State<RangePage> {
             (v) => setState(() {
                   basis = v;
                   invalidate();
-                })),
+                }),
+            helpTopic: 'basis'),
+        const SizedBox(height: 10),
         selectField(
             'مود قیمت',
             mode,
@@ -477,7 +511,8 @@ class _RangePageState extends State<RangePage> {
             (v) => setState(() {
                   mode = v;
                   invalidate();
-                })),
+                }),
+            helpTopic: 'range_stats'),
         FilledButton.icon(
             onPressed: calculating ? null : confirm,
             icon: const Icon(Icons.check),
@@ -514,9 +549,14 @@ class _RangePageState extends State<RangePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(_cardIdentity(entry.range.example)),
-                          const Text('شاخص‌های همین کالا',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 15)),
+                          Row(children: [
+                            const Expanded(
+                                child: Text('شاخص‌های همین کالا',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15))),
+                            const HelpBadge(topic: 'range_stats', size: 15),
+                          ]),
                           Text(
                               '${fmt(TaxPolicy.apply(entry.range.rate(mode)), decimals: mode == 'mean' ? 0 : 2)} تومان / ${entry.range.example.unitName(entry.range.basis)}',
                               style: const TextStyle(

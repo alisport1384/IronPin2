@@ -4,6 +4,7 @@ import '../domain/market.dart';
 import '../domain/money.dart';
 import '../domain/tax_policy.dart';
 import 'common.dart';
+import 'visual_help.dart';
 
 /// کنترل مالیات در تب قیمت و تب رنج: پیش‌فرض خاموش، درصد پیش‌فرض ۱۳.
 /// با روشن شدن، به همه قیمت‌های نمایش‌داده‌شدهٔ هر دو تب اضافه می‌شود.
@@ -68,16 +69,20 @@ class TaxChip extends StatelessWidget {
         'مالیات: ${on ? '${faDigits(_pctLabel(TaxPolicy.percent))}٪' : 'خاموش'}';
     return Align(
         alignment: Alignment.centerRight,
-        child: TextButton(
-            onPressed: () => _edit(context),
-            style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                visualDensity: VisualDensity.compact),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(on ? Icons.percent : Icons.percent_outlined,
-                  size: 15, color: teal),
-              const SizedBox(width: 6),
-              Text(label, style: const TextStyle(fontSize: 11, color: ink)),
-            ])));
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          TextButton(
+              onPressed: () => _edit(context),
+              style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  visualDensity: VisualDensity.compact),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(on ? Icons.percent : Icons.percent_outlined,
+                    size: 15, color: teal),
+                const SizedBox(width: 6),
+                Text(label, style: const TextStyle(fontSize: 11, color: ink)),
+              ])),
+          const HelpBadge(topic: 'tax', size: 15),
+        ]));
   }
 }

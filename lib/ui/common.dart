@@ -3,6 +3,7 @@ import 'dart:async';
 import '../data/app_logger.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../domain/market.dart';
+import 'visual_help.dart';
 
 const ink = Color(0xff122c3d),
     teal = Color(0xff008c82),
@@ -135,12 +136,13 @@ String windowText(int days) => windowLabels['$days'] ?? '$days روز';
 /// always equals the parent's default and it only differs when the user chooses
 /// so for that tab.
 Widget windowField(String label, int days, ValueChanged<int> onChanged,
-    {bool inherit = false, int inherited = 0}) {
+    {bool inherit = false, int inherited = 0, String? helpTopic = 'window'}) {
   final options = <String, String>{
     if (inherit) '-1': 'مانند بازه اصلی (${windowText(inherited)})',
     ...windowLabels,
   };
-  return selectField(label, '$days', options, (v) => onChanged(int.parse(v)));
+  return selectField(label, '$days', options, (v) => onChanged(int.parse(v)),
+      helpTopic: helpTopic);
 }
 
 /// A compact one-line time selector for the tabs, so a window can be changed
@@ -153,43 +155,58 @@ Widget windowChip(String label, int days, ValueChanged<int> onChanged,
   };
   return Align(
       alignment: Alignment.centerRight,
-      child: PopupMenuButton<String>(
-        initialValue: options.containsKey('$days') ? '$days' : null,
-        onSelected: (v) => onChanged(int.parse(v)),
-        itemBuilder: (_) => [
-          for (final e in options.entries)
-            PopupMenuItem(value: e.key, child: Text(e.value))
-        ],
-        child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.schedule, size: 15, color: teal),
-              const SizedBox(width: 6),
-              Flexible(
-                  child: Text(
-                      '$label: ${windowText(days < 0 ? inherited : days)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: ink))),
-              const Icon(Icons.arrow_drop_down, size: 16, color: muted)
-            ])),
-      ));
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Flexible(
+            child: PopupMenuButton<String>(
+          initialValue: options.containsKey('$days') ? '$days' : null,
+          onSelected: (v) => onChanged(int.parse(v)),
+          itemBuilder: (_) => [
+            for (final e in options.entries)
+              PopupMenuItem(value: e.key, child: Text(e.value))
+          ],
+          child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.schedule, size: 15, color: teal),
+                const SizedBox(width: 6),
+                Flexible(
+                    child: Text(
+                        '$label: ${windowText(days < 0 ? inherited : days)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: ink))),
+                const Icon(Icons.arrow_drop_down, size: 16, color: muted)
+              ])),
+        )),
+        const HelpBadge(topic: 'window', size: 15),
+      ]));
 }
 
 Widget selectField(String label, String value, Map<String, String> options,
-        ValueChanged<String> onChanged) =>
-    DropdownButtonFormField<String>(
-        value: options.containsKey(value) ? value : options.keys.first,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: label),
-        items: options.entries
-            .map((e) => DropdownMenuItem(
-                value: e.key,
-                child: Text(e.value, overflow: TextOverflow.ellipsis)))
-            .toList(),
-        onChanged: (v) {
-          if (v != null) onChanged(v);
-        });
+    ValueChanged<String> onChanged,
+    {String? helpTopic}) {
+  final field = DropdownButtonFormField<String>(
+      value: options.containsKey(value) ? value : options.keys.first,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label),
+      items: options.entries
+          .map((e) => DropdownMenuItem(
+              value: e.key,
+              child: Text(e.value, overflow: TextOverflow.ellipsis)))
+          .toList(),
+      onChanged: (v) {
+        if (v != null) onChanged(v);
+      });
+  if (helpTopic == null) return field;
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Expanded(child: field),
+      const SizedBox(width: 4),
+      HelpBadge(topic: helpTopic, size: 17),
+    ],
+  );
+}
 String sourceDay(Quote q) =>
     q.sourceDateRaw.isEmpty ? 'تاریخ نرخ نامشخص' : q.sourceDateRaw;
 

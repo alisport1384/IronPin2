@@ -11,6 +11,7 @@ import '../data/controller.dart';
 import '../domain/market.dart';
 import 'common.dart';
 import 'prices_page.dart';
+import 'visual_help.dart';
 
 class ChartPage extends StatefulWidget {
   final MarketController c;
@@ -168,6 +169,8 @@ class _ChartPageState extends State<ChartPage> {
             label: const Text('شاخص‌های رنج — فقط تغییرات'),
             selected: mode == 'indicators',
             onSelected: (_) => setState(() => mode = 'indicators')),
+        const SizedBox(width: 4),
+        const HelpBadge(topic: 'chart_mode', size: 16),
       ]),
       if (mode == 'indicators')
         Padding(

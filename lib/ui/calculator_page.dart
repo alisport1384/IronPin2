@@ -8,6 +8,7 @@ import '../domain/market.dart';
 import 'common.dart';
 import '../domain/money.dart';
 import 'product_converter_view.dart';
+import 'visual_help.dart';
 
 class CalculatorPage extends StatefulWidget {
   final String city;
@@ -147,21 +148,40 @@ class _CalculatorPageState extends State<CalculatorPage> {
     }
   }
 
-  Widget numeric(String label, TextEditingController ctl) => Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: TextField(
-          controller: ctl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(labelText: label),
-          onChanged: (_) {
-            if (result != null || error != null) {
-              setState(() {
-                result = null;
-                total = null;
-                error = null;
-              });
-            }
-          }));
+  String _helpTopicForShape(String s) => switch (s) {
+        'round' => 'rebar',
+        'anchor' || 'anchorMeasured' => 'ghameh',
+        'ibeam' => 'ibeam_geom',
+        'catalog' => 'catalog_kgm',
+        'formed' => 'plate',
+        'piece' => 'piece_pack',
+        'square' => 'bar',
+        'bulk' => 'unit_item',
+        _ => s,
+      };
+
+  Widget numeric(String label, TextEditingController ctl, {String? helpTopic}) =>
+      Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: TextField(
+              controller: ctl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: label,
+                suffixIcon: helpTopic == null
+                    ? null
+                    : HelpBadge(topic: helpTopic, size: 16),
+              ),
+              onChanged: (_) {
+                if (result != null || error != null) {
+                  setState(() {
+                    result = null;
+                    total = null;
+                    error = null;
+                  });
+                }
+              }));
   @override
   Widget build(BuildContext context) =>
       ListView(padding: const EdgeInsets.all(20), children: [
@@ -243,7 +263,8 @@ class _CalculatorPageState extends State<CalculatorPage> {
                                 ? '۱۲'
                                 : '۶';
                     resetFields();
-                  })),
+                  }),
+              helpTopic: _helpTopicForShape(shape)),
           const SizedBox(height: 16),
           const Text('۲. اندازه و تعداد را وارد کن',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
@@ -260,7 +281,8 @@ class _CalculatorPageState extends State<CalculatorPage> {
                     : shape == 'catalog' && f.key == 'kgm'
                         ? 'وزن یک شاخه طبق فروشنده (کیلوگرم)'
                         : f.label,
-                values[f.key]!),
+                values[f.key]!,
+                helpTopic: _helpTopicForShape(shape)),
           if (shape != 'anchorMeasured')
             numeric(
                 shape == 'anchor'
@@ -367,7 +389,8 @@ class _CalculatorPageState extends State<CalculatorPage> {
                             ? 'piece'
                             : 'm';
                     resetFields();
-                  })),
+                  }),
+              helpTopic: _helpTopicForShape(shape)),
           infoBox('مبنای محاسبه', spec.note),
           const SizedBox(height: 10),
           selectField(
@@ -382,10 +405,13 @@ class _CalculatorPageState extends State<CalculatorPage> {
                     if (v == 'steel') density.text = '۷۸۵۰';
                     result = null;
                     total = null;
-                  })),
+                  }),
+              helpTopic: 'density'),
           const SizedBox(height: 14),
-          numeric('چگالی (کیلوگرم بر مترمکعب)', density),
-          for (final f in spec.fields) numeric(f.label, values[f.key]!),
+          numeric('چگالی (کیلوگرم بر مترمکعب)', density, helpTopic: 'density'),
+          for (final f in spec.fields)
+            numeric(f.label, values[f.key]!,
+                helpTopic: _helpTopicForShape(shape)),
           selectField(
               'واحد مقدار ورودی',
               inputUnit,
@@ -402,7 +428,8 @@ class _CalculatorPageState extends State<CalculatorPage> {
                     if (v != 'cut' && priceUnit == 'cut') priceUnit = 'kg';
                     result = null;
                     total = null;
-                  })),
+                  }),
+              helpTopic: 'order_qty'),
           const SizedBox(height: 14),
           if (inputUnit == 'cut' &&
               SteelCalculator.cuttableShapes.contains(shape)) ...[

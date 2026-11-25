@@ -56,7 +56,7 @@ test/           مجموعه کامل آزمون‌های آفلاین مدل، 
 
 - طراحی و معماری: [`docs/DESIGN.fa.md`](docs/DESIGN.fa.md)
 - راهنمای دو هوش جستجوگر: [`docs/SEARCH_INTELLIGENCE.fa.md`](docs/SEARCH_INTELLIGENCE.fa.md)
-- گزارش آزمون و تغییرات نسخهٔ جاری (۰.۹.۲۵): [`docs/TEST_REPORT.v0.9.25.fa.md`](docs/TEST_REPORT.v0.9.25.fa.md) · [`production/CHANGES.v0.9.25.fa.md`](production/CHANGES.v0.9.25.fa.md)
+- گزارش آزمون و تغییرات نسخهٔ جاری (۰.۹.۲۶): [`docs/TEST_REPORT.v0.9.26.fa.md`](docs/TEST_REPORT.v0.9.26.fa.md) · [`production/CHANGES.v0.9.26.fa.md`](production/CHANGES.v0.9.26.fa.md)
 - فرمول‌های محاسباتی: [`docs/CALCULATIONS.fa.md`](docs/CALCULATIONS.fa.md)
 - فهرست منابع و ساخت: [`docs/SOURCES.fa.md`](docs/SOURCES.fa.md) · [`docs/BUILD.fa.md`](docs/BUILD.fa.md)
 - تاریخچه تغییرات نسخه‌ها: پوشه [`production/`](production/)

@@ -7,6 +7,7 @@ import 'common.dart';
 import '../domain/money.dart';
 import '../domain/tax_policy.dart';
 import 'tax_chip.dart';
+import 'visual_help.dart';
 
 class PricesPage extends StatefulWidget {
   final MarketController c;
@@ -169,7 +170,8 @@ class _PricesPageState extends State<PricesPage> {
                                   : 'گران به ارزان',
                           style: const TextStyle(
                               fontSize: 11, fontWeight: FontWeight.w600))
-                    ])))
+                    ]))),
+            const HelpBadge(topic: 'sort', size: 15),
           ])),
       if (c.filter.query.isNotEmpty && interpreted.isNotEmpty)
         Padding(
@@ -609,7 +611,8 @@ Future<void> showMarketFilters(BuildContext context, MarketController c) async {
                           'نوع کالا',
                           f.category,
                           {'': 'همه کالاها', for (final v in cats) v: v},
-                          (v) => update(() => f.category = v)),
+                          (v) => update(() => f.category = v),
+                          helpTopic: 'spec_filter'),
                       const SizedBox(height: 14),
                       for (final item
                           in <(String, String, ValueChanged<String>)>[
@@ -633,16 +636,26 @@ Future<void> showMarketFilters(BuildContext context, MarketController c) async {
                             padding: const EdgeInsets.only(bottom: 14),
                             child: TextFormField(
                                 initialValue: item.$2,
-                                decoration: InputDecoration(labelText: item.$1),
+                                decoration: InputDecoration(
+                                  labelText: item.$1,
+                                  suffixIcon:
+                                      const HelpBadge(topic: 'spec_filter'),
+                                ),
                                 onChanged: item.$3)),
                       selectField(
                           'جنس / متریال',
                           f.material,
                           {'': 'همه جنس‌ها', for (final v in mats) v: v},
-                          (v) => update(() => f.material = v)),
+                          (v) => update(() => f.material = v),
+                          helpTopic: 'density'),
                       const SizedBox(height: 14),
-                      Text(
-                          'شهر سراسری: ${c.selectedCity.isEmpty ? 'همه شهرها' : c.selectedCity}؛ تغییر فقط در اطلاعات'),
+                      Row(children: [
+                        Expanded(
+                            child: Text(
+                                'شهر سراسری: ${c.selectedCity.isEmpty ? 'همه شهرها' : c.selectedCity}؛ تغییر فقط در اطلاعات')),
+                        const HelpBadge(topic: 'city_scope', size: 15),
+                      ]),
+                      const SizedBox(height: 8),
                       selectField(
                           'واحد فروش در منبع',
                           f.unit,
@@ -657,7 +670,8 @@ Future<void> showMarketFilters(BuildContext context, MarketController c) async {
                             'roll': 'رول',
                             'unknown': 'نامشخص'
                           },
-                          (v) => update(() => f.unit = v)),
+                          (v) => update(() => f.unit = v),
+                          helpTopic: 'basis'),
                       const SizedBox(height: 14),
                       selectField(
                           'مبنای قیمت و مرتب‌سازی',
@@ -666,7 +680,8 @@ Future<void> showMarketFilters(BuildContext context, MarketController c) async {
                             'original': 'واحد اصلی — گروه‌بندی جدا',
                             'kg': 'تبدیل به تومان/کیلو با وزن صریح'
                           },
-                          (v) => update(() => f.basis = v)),
+                          (v) => update(() => f.basis = v),
+                          helpTopic: 'basis'),
                       const SizedBox(height: 14),
                       Row(children: [
                         Expanded(
@@ -674,7 +689,9 @@ Future<void> showMarketFilters(BuildContext context, MarketController c) async {
                                 initialValue: f.minPrice?.toStringAsFixed(0),
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                    labelText: 'حداقل قیمت (تومان)'),
+                                    labelText: 'حداقل قیمت (تومان)',
+                                    suffixIcon:
+                                        HelpBadge(topic: 'range_stats')),
                                 onChanged: (v) =>
                                     update(() => f.minPrice = number(v)))),
                         const SizedBox(width: 12),
@@ -683,7 +700,9 @@ Future<void> showMarketFilters(BuildContext context, MarketController c) async {
                                 initialValue: f.maxPrice?.toStringAsFixed(0),
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                    labelText: 'حداکثر قیمت (تومان)'),
+                                    labelText: 'حداکثر قیمت (تومان)',
+                                    suffixIcon:
+                                        HelpBadge(topic: 'range_stats')),
                                 onChanged: (v) =>
                                     update(() => f.maxPrice = number(v))))
                       ]),
