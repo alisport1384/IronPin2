@@ -382,8 +382,13 @@ class PublicTables {
         final spec = ProductText.spec(title, categoryHint: rowCategory);
         final unitText = field(r'^واحد(?:\s|$)');
         final cellUnit = parseUnit(unitText);
-        final headerUnit =
-            headingOwned ? TextPriceEngine.priceUnit(priceHeader) : 'unknown';
+        final headerUnit = !headingOwned
+            ? 'unknown'
+            : (TextPriceEngine.priceUnit(priceHeader) != 'unknown'
+                ? TextPriceEngine.priceUnit(priceHeader)
+                : (RegExp(r'واحد\s*وزن|فی\s*وزن|هر\s*کیلو').hasMatch(priceHeader)
+                    ? 'kg'
+                    : 'unknown'));
         final baseUnit = cellUnit != 'unknown' ? cellUnit : headerUnit;
         final approx = _resolveApproxPrice(priceForMoney, baseUnit);
         if (approx != null) {
@@ -438,6 +443,16 @@ class PublicTables {
           for (final m in prices) TextPriceEngine.money(m[0]!)
         ].whereType<double>().toList();
         final isTaxPair = _hasTaxRatio(priceNums);
+        var taxPairNote = '';
+        if (headingOwned && isTaxPair && prices.length == 2) {
+          final a = priceNums[0], b = priceNums[1];
+          final loIdx = a <= b ? 0 : 1;
+          final hiIdx = a <= b ? 1 : 0;
+          final loText = prices[loIdx][0]!.replaceAll('٬', ',');
+          final hiText = prices[hiIdx][0]!.replaceAll('٬', ',');
+          taxPairNote = '$loText (بدون مالیات) • $hiText (با مالیات)';
+          prices = [prices[loIdx]];
+        }
         final rawPrice = (prices.length == 1
                 ? prices.single[0]!
                 : prices.length > 1
@@ -503,9 +518,11 @@ class PublicTables {
                     ? 'نامشخص'
                     : scope,
             material: materialOf(title),
-            tax: TextPriceEngine.tax(field('مالیات|ارزش افزوده')) == 'نامشخص'
-                ? precedingTax
-                : TextPriceEngine.tax(field('مالیات|ارزش افزوده')),
+            tax: taxPairNote.isNotEmpty
+                ? 'بدون ارزش افزوده'
+                : TextPriceEngine.tax(field('مالیات|ارزش افزوده')) == 'نامشخص'
+                    ? precedingTax
+                    : TextPriceEngine.tax(field('مالیات|ارزش افزوده')),
             terms:
                 field('شرایط|تسویه').isEmpty ? 'نامشخص' : field('شرایط|تسویه'),
             lengthM: RegExp(r'\bm\b|متر').hasMatch(lengthHeader)
@@ -521,6 +538,7 @@ class PublicTables {
               if (valid || prices.length > 1) 'مبلغ استخراج‌شده': rawPrice,
               if (prices.length > 1) 'مبلغ چندگانه': 'بله',
               if (isTaxPair) 'تفکیک منبع': 'با و بدون ارزش افزوده',
+              if (taxPairNote.isNotEmpty) 'مبالغ منبع': taxPairNote,
               if (approx != null) 'معادل تبدیل منبع': approx.approxNote,
               if (rowDate.isNotEmpty && announced == null)
                 'تاریخ نامعتبر': 'بله',

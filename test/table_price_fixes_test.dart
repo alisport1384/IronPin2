@@ -125,10 +125,10 @@ void main() {
   });
 
   test(
-      'adjacent Persian/Latin prices and fluctuation span do not merge into trillion numbers or 3-number strings',
+      'adjacent Persian/Latin prices, VAT pairs, and "قیمت واحد وزن" resolve to base amount and kg unit',
       () {
     const html = '''
-      <h2>قیمت تیرآهن و توری</h2>
+      <h2>قیمت تیرآهن، توری و میلگرد</h2>
       <p>آخرین بروزرسانی قیمت: 1405/09/03</p>
       <table>
         <tr><th>محصول</th><th>واحد</th><th>قیمت (تومان)</th></tr>
@@ -143,31 +143,44 @@ void main() {
           <td>1,579,500۱٬۷۳۷٬۰۰۰</td>
         </tr>
       </table>
+      <table>
+        <tr><th>نام محصول</th><th>قیمت واحد وزن</th><th>طول شاخه</th></tr>
+        <tr>
+          <td>میلگرد سایز 8 ابهر عتیق A2</td>
+          <td>114,039125,443</td>
+          <td>12 متر</td>
+        </tr>
+      </table>
     ''';
 
     final rows = PublicTables.read(
       body: html,
       url: 'https://example.com/beam',
       endpoint: 'ext-4',
-      seller: 'فروشنده نمونه',
+      seller: 'امروز آهن',
       city: 'تهران',
       category: 'عمومی',
       fetchedAt: fetched,
       headingOwned: true,
     );
 
-    expect(rows.length, 2);
-    expect(rows[0].details['مبلغ چندگانه'], 'بله');
-    expect(rows[0].details['تفکیک منبع'], 'با و بدون ارزش افزوده');
-    expect(rows[0].details['مبلغ استخراج‌شده'], '36,300,000 33,000,000');
+    expect(rows.length, 3);
+    expect(rows[0].amount, 33000000);
+    expect(rows[0].tax, 'بدون ارزش افزوده');
+    expect(rows[0].details['مبلغ چندگانه'], isNull);
+    expect(rows[0].details['مبالغ منبع'], contains('33,000,000'));
 
-    expect(rows[1].details['مبلغ چندگانه'], 'بله');
-    expect(rows[1].details['تفکیک منبع'], 'با و بدون ارزش افزوده');
-    expect(rows[1].details['مبلغ استخراج‌شده'], '1,579,500 1,737,000');
+    expect(rows[1].amount, 1579500);
+    expect(rows[1].tax, 'بدون ارزش افزوده');
+    expect(rows[1].details['مبلغ چندگانه'], isNull);
+
+    expect(rows[2].unit, 'kg');
+    expect(rows[2].details['مبلغ استخراج‌شده'], '114,039');
+    expect(rows[2].tax, 'بدون ارزش افزوده');
   });
 
   testWidgets(
-      'QuoteCard hides raw multi-price/spec strings in main price slot',
+      'QuoteCard displays numeric base price for stored VAT-pair quotes and never shows multi-price placeholder',
       (t) async {
     final multiTaxQuote = Quote(
       id: 'q1',
@@ -222,8 +235,8 @@ void main() {
       ),
     ));
 
-    expect(find.text('چند مبلغی (با/بی‌مالیات)'), findsOneWidget);
-    expect(find.textContaining('36,300,000'), findsNothing);
+    expect(find.text('۳۳,۰۰۰,۰۰۰'), findsOneWidget);
+    expect(find.textContaining('چند مبلغی'), findsNothing);
     expect(find.text('نامشخص'), findsOneWidget);
     expect(find.text('بدون قیمت معتبر'), findsOneWidget);
   });

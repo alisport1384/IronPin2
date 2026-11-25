@@ -253,6 +253,8 @@ double? _visibleRawAmount(Quote q) {
   // Zero is not a price: sources that write «۰ تومان» mean "no price", so the
   // amount only counts when it is a real, positive number (Bug B).
   if (q.amount != null && q.amount! > 0) return q.amount;
+  final taxPairBase = q.taxPairBaseTextAmount;
+  if (taxPairBase != null) return taxPairBase;
   final raw = latin(q.details['مبلغ استخراج‌شده'] ?? '');
   if (!_rawAmountPattern.hasMatch(raw)) return null;
   final n = number(raw);
@@ -263,11 +265,6 @@ String _offerAmount(Quote q, String basis) {
   final value = q.priceFor(basis) ?? _visibleRawAmount(q);
   if (value == null) {
     if (!q.hasUsableTextAmount) return 'نامشخص';
-    if (q.details['مبلغ چندگانه'] == 'بله' &&
-        !(q.details['مبلغ استخراج‌شده'] ?? '').contains(' تا ')) {
-      final isTax = q.details['تفکیک منبع'] == 'با و بدون ارزش افزوده';
-      return isTax ? 'چند مبلغی (با/بی‌مالیات)' : 'چند مبلغی (نیازمند بررسی)';
-    }
     return faDigits(q.details['مبلغ استخراج‌شده'] ?? 'نیازمند بررسی');
   }
   final converted = toman(value, q.currency);

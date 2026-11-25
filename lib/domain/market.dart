@@ -455,6 +455,25 @@ class Quote {
 
   bool get hasUsableTextAmount =>
       isUsableTextAmount(details['مبلغ استخراج‌شده'] ?? '');
+
+  /// If a stored raw text amount holds a without-VAT / with-VAT pair (1.10x),
+  /// returns the base (without-VAT) numeric amount so the user always sees a
+  /// concrete price rather than a "multiple prices" placeholder.
+  double? get taxPairBaseTextAmount {
+    final raw = latin(details['مبلغ استخراج‌شده'] ?? '').trim();
+    if (raw.isEmpty || raw.contains(' تا ')) return null;
+    final nums = RegExp(r'\d[\d,.٬]*')
+        .allMatches(raw)
+        .map((m) => _parseAmountToken(m[0]!))
+        .whereType<double>()
+        .where((n) => n.isFinite && n > 0)
+        .toList();
+    if (nums.length != 2) return null;
+    final lo = nums[0] <= nums[1] ? nums[0] : nums[1];
+    final hi = nums[0] <= nums[1] ? nums[1] : nums[0];
+    final ratio = hi / lo;
+    return (ratio >= 1.088 && ratio <= 1.106) ? lo : null;
+  }
   bool isFresh(DateTime now) =>
       announcedAt != null &&
       now.toUtc().difference(announcedAt!).inHours <= 30 &&

@@ -38,13 +38,11 @@ String candidatePriceTextOf(Quote q) {
   if (amount != null && amount > 0) {
     return '${fmt(amount)} ${faDigits(q.currency)}';
   }
-  if (!q.hasUsableTextAmount) return 'بدون قیمت';
-  if (q.details['مبلغ چندگانه'] == 'بله' &&
-      !(q.details['مبلغ استخراج‌شده'] ?? '').contains(' تا ')) {
-    return q.details['تفکیک منبع'] == 'با و بدون ارزش افزوده'
-        ? 'چند مبلغی (با/بی‌مالیات)'
-        : 'چند مبلغی (نیازمند بررسی)';
+  final taxPairBase = q.taxPairBaseTextAmount;
+  if (taxPairBase != null) {
+    return '${fmt(taxPairBase)} ${faDigits(q.currency)}';
   }
+  if (!q.hasUsableTextAmount) return 'بدون قیمت';
   return faDigits(q.details['مبلغ استخراج‌شده'] ?? 'بدون قیمت');
 }
 
