@@ -682,7 +682,7 @@ class _VisualHelpPainter extends CustomPainter {
       case _DiagramKind.hbeam:
         final isH = kind == _DiagramKind.hbeam;
         final w = isH ? 96.0 : 66.0;
-        final h = 92.0;
+        const h = 92.0;
         final tf = isH ? 15.0 : 12.0;
         final tw = isH ? 13.0 : 9.0;
         final p = Path()
@@ -947,7 +947,7 @@ class _VisualHelpPainter extends CustomPainter {
         canvas.drawLine(Offset(cx - 105, cy + 12), Offset(cx + 105, cy + 12), outline);
         for (var i = 0; i < 4; i++) {
           final x = cx - 80 + i * 52;
-          canvas.drawCircle(Offset(x, cy + 12), 7, Paint()..color = i == 2 ? teal : steelDarkFill);
+          canvas.drawCircle(Offset(x, cy + 12), 7, Paint()..color = i == 2 ? teal : steelDarkFill.color);
           canvas.drawCircle(Offset(x, cy + 12), 7, outline);
         }
         final tagTxt = switch (kind) {

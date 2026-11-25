@@ -549,13 +549,13 @@ class _RangePageState extends State<RangePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(_cardIdentity(entry.range.example)),
-                          Row(children: [
-                            const Expanded(
+                          const Row(children: [
+                            Expanded(
                                 child: Text('شاخص‌های همین کالا',
                                     style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 15))),
-                            const HelpBadge(topic: 'range_stats', size: 15),
+                            HelpBadge(topic: 'range_stats', size: 15),
                           ]),
                           Text(
                               '${fmt(TaxPolicy.apply(entry.range.rate(mode)), decimals: mode == 'mean' ? 0 : 2)} تومان / ${entry.range.example.unitName(entry.range.basis)}',

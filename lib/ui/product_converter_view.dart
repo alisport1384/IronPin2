@@ -590,11 +590,11 @@ class _ProductConverterViewState extends State<ProductConverterView> {
         if (spec.supportsCutCount) ...[
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: Row(
+            title: const Row(
               children: [
-                const Expanded(
+                Expanded(
                     child: Text('معیارهای برش «عدد» (قطعه برش‌خورده)')),
-                const HelpBadge(topic: 'cut_piece', size: 16),
+                HelpBadge(topic: 'cut_piece', size: 16),
               ],
             ),
             subtitle: Text(productId == 'plate'
@@ -622,13 +622,13 @@ class _ProductConverterViewState extends State<ProductConverterView> {
           ],
         ],
         const Divider(height: 24),
-        Row(
+        const Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text('۲. مقدار سفارش شما چقدر است؟ (تبدیل به همه واحدها)',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
-            const HelpBadge(topic: 'order_qty', size: 17),
+            HelpBadge(topic: 'order_qty', size: 17),
           ],
         ),
         const SizedBox(height: 4),
@@ -775,13 +775,13 @@ class _ProductConverterViewState extends State<ProductConverterView> {
             ),
           ),
           const Divider(height: 28),
-          Row(
+          const Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text('۳. قیمت پایه، خدمات جانبی و قیمت نهایی',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
-              const HelpBadge(topic: 'services', size: 17),
+              HelpBadge(topic: 'services', size: 17),
             ],
           ),
           const SizedBox(height: 10),
@@ -807,14 +807,14 @@ class _ProductConverterViewState extends State<ProductConverterView> {
             ],
           ),
           const SizedBox(height: 4),
-          Row(
+          const Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                     'خدمات (برش، رزوه و خم، پانچ، لیزر، دریل یا خدمت دلخواه)',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               ),
-              const HelpBadge(topic: 'services', size: 16),
+              HelpBadge(topic: 'services', size: 16),
             ],
           ),
           const SizedBox(height: 8),
