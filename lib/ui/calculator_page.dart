@@ -7,6 +7,7 @@ import '../domain/calculator.dart';
 import '../domain/market.dart';
 import 'common.dart';
 import '../domain/money.dart';
+import 'cut_calculator_view.dart';
 import 'product_converter_view.dart';
 import 'visual_help.dart';
 
@@ -18,7 +19,7 @@ class CalculatorPage extends StatefulWidget {
 }
 
 class _CalculatorPageState extends State<CalculatorPage> {
-  bool converterMode = true;
+  String calcMode = 'converter';
   bool advanced = false;
   bool cutByCount = false;
   String shape = 'round', inputUnit = 'm', priceUnit = 'kg', metal = 'steel';
@@ -200,25 +201,32 @@ class _CalculatorPageState extends State<CalculatorPage> {
             'شهر سراسری: ${widget.city.isEmpty ? 'همه شهرها' : widget.city}؛ این ماشین حساب از ورودی دستی استفاده می‌کند، نه قیمت شهر دیگر.',
             style: const TextStyle(fontSize: 11, color: muted)),
         const SizedBox(height: 14),
-        SegmentedButton<bool>(
+        SegmentedButton<String>(
           segments: const [
-            ButtonSegment<bool>(
-              value: true,
-              icon: Icon(Icons.swap_horiz_rounded, size: 18),
-              label: Text('تبدیل واحد و خدمات'),
+            ButtonSegment<String>(
+              value: 'converter',
+              icon: Icon(Icons.swap_horiz_rounded, size: 15),
+              label: Text('تبدیل واحد و خدمات', style: TextStyle(fontSize: 11)),
             ),
-            ButtonSegment<bool>(
-              value: false,
-              icon: Icon(Icons.calculate_outlined, size: 18),
-              label: Text('فرمولی کلاسیک'),
+            ButtonSegment<String>(
+              value: 'cut',
+              icon: Icon(Icons.content_cut, size: 15),
+              label: Text('برش‌خورده', style: TextStyle(fontSize: 11)),
+            ),
+            ButtonSegment<String>(
+              value: 'classic',
+              icon: Icon(Icons.calculate_outlined, size: 15),
+              label: Text('فرمولی کلاسیک', style: TextStyle(fontSize: 11)),
             ),
           ],
-          selected: {converterMode},
-          onSelectionChanged: (s) => setState(() => converterMode = s.first),
+          selected: {calcMode},
+          onSelectionChanged: (s) => setState(() => calcMode = s.first),
         ),
         const SizedBox(height: 16),
-        if (converterMode) ...[
+        if (calcMode == 'converter') ...[
           const ProductConverterView(),
+        ] else if (calcMode == 'cut') ...[
+          const CutCalculatorView(),
         ] else ...[
         SwitchListTile(
             contentPadding: EdgeInsets.zero,

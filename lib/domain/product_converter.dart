@@ -650,6 +650,7 @@ class ProductConverter {
     double shipping = 0,
     double taxPercent = 0,
     bool taxIncludesServices = true,
+    bool includeWasteInBaseCost = false,
   }) {
     if (baseUnitPrice != null && (!baseUnitPrice.isFinite || baseUnitPrice < 0)) {
       throw const FormatException('قیمت پایه نمی‌تواند منفی باشد.');
@@ -660,7 +661,18 @@ class ProductConverter {
     if (!taxPercent.isFinite || taxPercent < 0) {
       throw const FormatException('درصد مالیات نمی‌تواند منفی باشد.');
     }
-    final baseQty = unitQuantityFromResult(conversion, basePriceUnit);
+    double baseQty = unitQuantityFromResult(conversion, basePriceUnit);
+    final alloc = conversion.cutAllocation;
+    if (includeWasteInBaseCost && alloc != null && alloc.fitsInStock) {
+      baseQty = switch (basePriceUnit) {
+        'kg' => alloc.stockTotalKg,
+        'ton' => alloc.stockTotalKg / 1000.0,
+        'm2' => alloc.requiredStockPieces * conversion.areaPerPiece,
+        'm' => alloc.requiredStockPieces * conversion.pieceLengthM,
+        'piece' => alloc.requiredStockPieces.toDouble(),
+        _ => baseQty,
+      };
+    }
     final basePrice = baseUnitPrice ?? 0.0;
     final baseCost = baseQty > 0 ? baseQty * basePrice : 0.0;
 
@@ -1200,5 +1212,339 @@ class ProductConverter {
         totalBundles: totalPieces / piecesPerBundle,
       );
     }
+  }
+
+  /// Isolated calculation for cut-to-size orders (قطعه برش‌خورده):
+  /// Stock sheet/branch dimensions (widthMm for plate, pieceLengthM, piecesPerBundle)
+  /// have ZERO effect unless [includeStockWaste] is explicitly enabled.
+  static ProductConversionResult convertCutPiece({
+    required String productId,
+    required Map<String, double> fields,
+    required double density,
+    required String inputUnit, // 'cut', 'kg', 'ton', 'm', 'm2'
+    required double inputValue,
+    required double cutLengthMm,
+    double? cutWidthMm,
+    double? overrideKgPerMetre,
+    bool includeStockWaste = false,
+    double? stockWidthMm,
+    double? stockLengthM,
+  }) {
+    final spec = converterProducts.firstWhere(
+      (p) => p.id == productId,
+      orElse: () => throw const FormatException('کالای انتخابی معتبر نیست.'),
+    );
+    if (!spec.supportsCutCount) {
+      throw const FormatException('این کالا در حالت برش‌خورده پشتیبانی نمی‌شود.');
+    }
+    if (!inputValue.isFinite || inputValue <= 0) {
+      throw const FormatException('مقدار سفارش باید بزرگ‌تر از صفر باشد.');
+    }
+    if (!cutLengthMm.isFinite || cutLengthMm <= 0) {
+      throw const FormatException(
+          'طول قطعه برش‌خورده (میلی‌متر) باید بزرگ‌تر از صفر باشد.');
+    }
+    if (productId == 'plate' &&
+        (cutWidthMm == null || !cutWidthMm.isFinite || cutWidthMm <= 0)) {
+      throw const FormatException(
+          'عرض قطعه برش‌خورده (میلی‌متر) باید بزرگ‌تر از صفر باشد.');
+    }
+    if (spec.usesDensity && (!density.isFinite || density <= 0)) {
+      throw const FormatException('چگالی جنس باید مثبت باشد.');
+    }
+
+    double f(String k) {
+      final v = fields[k];
+      final meta = spec.fields.firstWhere(
+        (x) => x.key == k,
+        orElse: () => const ConverterField('', '', 0),
+      );
+      if (v == null || !v.isFinite || (meta.allowZero ? v < 0 : v <= 0)) {
+        throw FormatException(
+            '${meta.label.isEmpty ? k : meta.label}: مقدار معتبر وارد کنید.');
+      }
+      return v;
+    }
+
+    final cutLenM = cutLengthMm / 1000.0;
+    double kgPerMetre = 0;
+    double areaPerMetre = 0;
+    double kgPerCut = 0;
+    double areaPerCut = 0;
+
+    final usePresetKgm = overrideKgPerMetre != null && overrideKgPerMetre > 0;
+    if (productId == 'plate') {
+      final t = f('thicknessMm');
+      final coat = f('coatGsm');
+      final wCutM = cutWidthMm! / 1000.0;
+      areaPerCut = wCutM * cutLenM;
+      kgPerCut = (t * cutWidthMm * cutLengthMm * density / 1e9) +
+          areaPerCut * (coat / 1000.0);
+      areaPerMetre = wCutM;
+      kgPerMetre = areaPerCut > 0 ? kgPerCut / cutLenM : 0;
+    } else if (usePresetKgm) {
+      kgPerMetre = overrideKgPerMetre;
+      kgPerCut = kgPerMetre * cutLenM;
+    } else {
+      double areaMm2 = 0;
+      switch (productId) {
+        case 'gutter':
+          final t = f('thicknessMm');
+          final w = f('widthMm');
+          final coat = f('coatGsm');
+          areaMm2 = t * w;
+          areaPerMetre = w / 1000.0;
+          kgPerMetre =
+              areaMm2 * density / 1e6 + areaPerMetre * (coat / 1000.0);
+          break;
+        case 'wallpost':
+          final t = f('thicknessMm');
+          final w = f('widthMm');
+          areaMm2 = t * w;
+          areaPerMetre = w / 1000.0;
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'rebar':
+        case 'wire':
+        case 'ghameh':
+          final d = f('diameterMm');
+          areaMm2 = math.pi * d * d / 4.0;
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'rhs':
+          final h = f('heightMm');
+          final b = f('widthMm');
+          final t = f('thicknessMm');
+          if (2 * t >= math.min(h, b)) {
+            throw const FormatException(
+                'ضخامت قوطی باید کمتر از نصف کمترین ضلع باشد.');
+          }
+          areaMm2 = h * b - (h - 2 * t) * (b - 2 * t);
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'pipe':
+          final od = f('odMm');
+          final t = f('thicknessMm');
+          if (2 * t >= od) {
+            throw const FormatException(
+                'دو برابر ضخامت باید کمتر از قطر خارجی باشد.');
+          }
+          areaMm2 = math.pi * t * (od - t);
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'flat':
+          final w = f('widthMm');
+          final t = f('thicknessMm');
+          areaMm2 = w * t;
+          areaPerMetre = w / 1000.0;
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'angle':
+          final l1 = f('leg1Mm');
+          final l2 = f('leg2Mm');
+          final t = f('thicknessMm');
+          if (t >= math.min(l1, l2)) {
+            throw const FormatException('ضخامت باید کمتر از طول بال‌ها باشد.');
+          }
+          areaMm2 = t * (l1 + l2 - t);
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'channel':
+        case 'ibeam_geom':
+          final h = f('heightMm');
+          final b = f('widthMm');
+          final tw = f('webMm');
+          final tf = f('flangeMm');
+          if (2 * tf >= h || tw >= b) {
+            throw const FormatException('ابعاد جان و بال معتبر نیست.');
+          }
+          areaMm2 = 2 * b * tf + (h - 2 * tf) * tw;
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'beam':
+        case 'hbeam':
+        case 'catalog_kgm':
+          kgPerMetre = f('kgPerMetre');
+          break;
+        case 'tee':
+          final h = f('heightMm');
+          final b = f('widthMm');
+          final tw = f('webMm');
+          final tf = f('flangeMm');
+          if (tf >= h || tw >= b) {
+            throw const FormatException('ابعاد سپری معتبر نیست.');
+          }
+          areaMm2 = b * tf + (h - tf) * tw;
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'bar':
+          areaMm2 = f('heightMm') * f('widthMm');
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+        case 'hex':
+          final s = f('flatToFlatMm');
+          areaMm2 = math.sqrt(3) / 2.0 * s * s;
+          kgPerMetre = areaMm2 * density / 1e6;
+          break;
+      }
+      if (productId == 'ghameh') {
+        final acc = f('accessoriesKg');
+        kgPerCut = kgPerMetre * cutLenM + acc;
+      } else {
+        kgPerCut = kgPerMetre * cutLenM;
+      }
+      areaPerCut = areaPerMetre * cutLenM;
+    }
+
+    late final double totalCuts;
+    late final double totalKg;
+    late final double totalAreaM2;
+    late final double totalMetres;
+
+    switch (inputUnit) {
+      case 'cut':
+        totalCuts = inputValue;
+        totalKg = totalCuts * kgPerCut;
+        totalAreaM2 = totalCuts * areaPerCut;
+        totalMetres = totalCuts * cutLenM;
+        break;
+      case 'kg':
+        totalKg = inputValue;
+        totalCuts = totalKg / kgPerCut;
+        totalAreaM2 = totalCuts * areaPerCut;
+        totalMetres = totalCuts * cutLenM;
+        break;
+      case 'ton':
+        totalKg = inputValue * 1000.0;
+        totalCuts = totalKg / kgPerCut;
+        totalAreaM2 = totalCuts * areaPerCut;
+        totalMetres = totalCuts * cutLenM;
+        break;
+      case 'm':
+        totalMetres = inputValue;
+        totalCuts = totalMetres / cutLenM;
+        totalKg = totalCuts * kgPerCut;
+        totalAreaM2 = totalCuts * areaPerCut;
+        break;
+      case 'm2':
+        if (areaPerCut <= 0) {
+          throw const FormatException('این کالا واحد مترمربع ندارد.');
+        }
+        totalAreaM2 = inputValue;
+        totalCuts = totalAreaM2 / areaPerCut;
+        totalKg = totalCuts * kgPerCut;
+        totalMetres = totalCuts * cutLenM;
+        break;
+      default:
+        throw const FormatException('واحد انتخابی در حالت برش‌خورده مجاز نیست.');
+    }
+
+    CutAllocationResult? cutAlloc;
+    double stockPieceKg = kgPerCut;
+    double stockPieceArea = areaPerCut;
+    double stockLenM = cutLenM;
+
+    if (includeStockWaste) {
+      if (stockLengthM == null || !stockLengthM.isFinite || stockLengthM <= 0) {
+        throw const FormatException(
+            'طول شیت/شاخه فابریک (متر) باید بزرگ‌تر از صفر باشد.');
+      }
+      stockLenM = stockLengthM;
+      if (productId == 'plate') {
+        if (stockWidthMm == null ||
+            !stockWidthMm.isFinite ||
+            stockWidthMm <= 0) {
+          throw const FormatException(
+              'عرض ورق فابریک (میلی‌متر) باید بزرگ‌تر از صفر باشد.');
+        }
+        final t = f('thicknessMm');
+        final coat = f('coatGsm');
+        final stockLmm = stockLengthM * 1000.0;
+        stockPieceArea = (stockWidthMm / 1000.0) * stockLengthM;
+        stockPieceKg = (t * stockWidthMm * stockLmm * density / 1e9) +
+            stockPieceArea * (coat / 1000.0);
+        final fitNormal =
+            (stockWidthMm ~/ cutWidthMm!) * (stockLmm ~/ cutLengthMm);
+        final fitRotated =
+            (stockWidthMm ~/ cutLengthMm) * (stockLmm ~/ cutWidthMm);
+        final cutsPerStock = math.max(fitNormal, fitRotated);
+        final fits = cutsPerStock > 0;
+        final requiredStock = fits ? (totalCuts / cutsPerStock).ceil() : 0;
+        final stockTotalKg = requiredStock * stockPieceKg;
+        final wasteKg = fits ? math.max(0.0, stockTotalKg - totalKg) : 0.0;
+        final wasteArea = fits
+            ? math.max(0.0, requiredStock * stockPieceArea - totalAreaM2)
+            : 0.0;
+        final wastePct =
+            stockTotalKg > 0 ? (wasteKg / stockTotalKg) * 100.0 : 0.0;
+        cutAlloc = CutAllocationResult(
+          isSheet: true,
+          fitsInStock: fits,
+          cutsPerStockPiece: cutsPerStock,
+          requiredStockPieces: requiredStock,
+          kgPerCut: kgPerCut,
+          areaPerCutM2: areaPerCut,
+          cutLengthM: cutLenM,
+          cutWidthMm: cutWidthMm,
+          totalCuts: totalCuts,
+          stockPieceKg: stockPieceKg,
+          stockTotalKg: stockTotalKg,
+          wasteKg: wasteKg,
+          wasteLengthM: 0,
+          wasteAreaM2: wasteArea,
+          wastePercent: wastePct,
+        );
+      } else {
+        stockPieceKg = kgPerMetre * stockLengthM;
+        stockPieceArea = areaPerMetre * stockLengthM;
+        final cutsPerStock = (stockLengthM + 1e-9) ~/ cutLenM;
+        final fits = cutsPerStock > 0;
+        final requiredStock = fits ? (totalCuts / cutsPerStock).ceil() : 0;
+        final stockTotalKg = requiredStock * stockPieceKg;
+        final wasteKg = fits ? math.max(0.0, stockTotalKg - totalKg) : 0.0;
+        final wasteLength = fits
+            ? math.max(0.0, requiredStock * stockLengthM - totalCuts * cutLenM)
+            : 0.0;
+        final wastePct =
+            stockTotalKg > 0 ? (wasteKg / stockTotalKg) * 100.0 : 0.0;
+        cutAlloc = CutAllocationResult(
+          isSheet: false,
+          fitsInStock: fits,
+          cutsPerStockPiece: cutsPerStock,
+          requiredStockPieces: requiredStock,
+          kgPerCut: kgPerCut,
+          areaPerCutM2: areaPerCut,
+          cutLengthM: cutLenM,
+          cutWidthMm: 0,
+          totalCuts: totalCuts,
+          stockPieceKg: stockPieceKg,
+          stockTotalKg: stockTotalKg,
+          wasteKg: wasteKg,
+          wasteLengthM: wasteLength,
+          wasteAreaM2: 0,
+          wastePercent: wastePct,
+        );
+      }
+    }
+
+    return ProductConversionResult(
+      spec: spec,
+      density: density,
+      kgPerMetre: kgPerMetre,
+      kgPerPiece: stockPieceKg,
+      kgPerBundle: stockPieceKg,
+      areaPerPiece: stockPieceArea,
+      piecesPerBundle: 1,
+      pieceLengthM: stockLenM,
+      totalKg: totalKg,
+      totalTon: totalKg / 1000.0,
+      totalMetres: totalMetres,
+      totalAreaM2: totalAreaM2,
+      totalPieces: cutAlloc != null ? cutAlloc.requiredStockPieces.toDouble() : totalCuts,
+      totalBundles: 1,
+      kgPerCut: kgPerCut,
+      totalCuts: totalCuts,
+      cutAllocation: cutAlloc,
+    );
   }
 }

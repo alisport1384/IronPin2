@@ -549,5 +549,90 @@ void main() {
       expect(find.textContaining('ورق تخت'), findsWidgets);
       expect(t.takeException(), isNull);
     });
+
+    test('convertCutPiece ignores stock dimensions when includeStockWaste is false and adds waste to price when enabled', () {
+      // 10 cut plates of 300x400x2mm steel -> each = 1.884 kg, total = 18.84 kg
+      final pureCut = ProductConverter.convertCutPiece(
+        productId: 'plate',
+        fields: {'thicknessMm': 2, 'coatGsm': 0},
+        density: 7850,
+        inputUnit: 'cut',
+        inputValue: 10,
+        cutWidthMm: 300,
+        cutLengthMm: 400,
+      );
+      expect(pureCut.kgPerCut, closeTo(1.884, 1e-6));
+      expect(pureCut.totalKg, closeTo(18.84, 1e-6));
+      expect(pureCut.cutAllocation, isNull);
+
+      final pureCost = ProductConverter.calculateOrderCost(
+        conversion: pureCut,
+        basePriceUnit: 'kg',
+        baseUnitPrice: 100000,
+      );
+      expect(pureCost.baseCost, closeTo(1884000, 1));
+
+      // Now turn ON stock sheet waste (1250x2500mm sheet = 49.0625 kg; fits 24 cuts -> 1 sheet required)
+      final withStock = ProductConverter.convertCutPiece(
+        productId: 'plate',
+        fields: {'thicknessMm': 2, 'coatGsm': 0},
+        density: 7850,
+        inputUnit: 'cut',
+        inputValue: 10,
+        cutWidthMm: 300,
+        cutLengthMm: 400,
+        includeStockWaste: true,
+        stockWidthMm: 1250,
+        stockLengthM: 2.5,
+      );
+      expect(withStock.cutAllocation, isNotNull);
+      expect(withStock.cutAllocation!.requiredStockPieces, 1);
+      expect(withStock.cutAllocation!.stockTotalKg, closeTo(49.0625, 1e-4));
+      expect(withStock.cutAllocation!.wasteKg, closeTo(30.2225, 1e-4));
+
+      // Charging waste in base price bills full stock sheet weight (49.0625 kg)
+      final wasteChargedCost = ProductConverter.calculateOrderCost(
+        conversion: withStock,
+        basePriceUnit: 'kg',
+        baseUnitPrice: 100000,
+        includeWasteInBaseCost: true,
+      );
+      expect(wasteChargedCost.baseQuantity, closeTo(49.0625, 1e-4));
+      expect(wasteChargedCost.baseCost, closeTo(4906250, 10));
+    });
+
+    testWidgets('CutCalculatorView isolated tab switches cleanly and toggles stock waste',
+        (t) async {
+      t.view.physicalSize = const Size(800, 1200);
+      t.view.devicePixelRatio = 1.0;
+      addTearDown(t.view.resetPhysicalSize);
+      addTearDown(t.view.resetDevicePixelRatio);
+
+      await t.pumpWidget(const MaterialApp(home: Scaffold(body: CalculatorPage())));
+      await t.pumpAndSettle();
+
+      await t.tap(find.text('برش‌خورده'));
+      await t.pumpAndSettle();
+
+      expect(find.text('حالت برش‌خورده مستقل (آزمایشی)'), findsOneWidget);
+      // 10 cuts of 300x400x2mm = 1.884 kg each, 18.840 kg total
+      expect(find.textContaining('۱٫۸۸۴ کیلوگرم'), findsOneWidget);
+      expect(find.textContaining('۱۸٫۸۴۰ کیلو'), findsOneWidget);
+      // Stock sheet width is hidden while toggle is OFF
+      expect(find.text('عرض ورق فابریک (میلی‌متر)'), findsNothing);
+
+      final scroll = find.byType(Scrollable).first;
+      await t.scrollUntilVisible(
+        find.text('تأمین از شیت/شاخه فابریک و محاسبه پرت'),
+        250,
+        scrollable: scroll,
+      );
+      await t.tap(find.text('تأمین از شیت/شاخه فابریک و محاسبه پرت'));
+      await t.pumpAndSettle();
+
+      expect(find.text('عرض ورق فابریک (میلی‌متر)'), findsOneWidget);
+      expect(find.text('اضافه شدن وزن پرت به قیمت نهایی کالا'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
   });
 }
