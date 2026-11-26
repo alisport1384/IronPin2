@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../domain/market.dart';
 import '../domain/market_tables.dart';
-import '../domain/money.dart';
 import '../domain/product_converter.dart';
 import 'common.dart';
 import 'visual_help.dart';
